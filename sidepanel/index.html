@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>多AI侧栏</title><link rel="icon" type="image/png" href="../assets/launcher-pet.png"><link rel="stylesheet" href="styles.css"></head>
+<body>
+  <div id="sideNotice" class="side-notice" hidden></div>
+  <nav class="ai-tabs" aria-label="AI 平台标签"><button id="minimizePanel" class="minimize-tab" title="最小化为网页桌宠">收起</button><button id="openWorkspace" class="fullscreen-tab" title="打开完整工作台">全屏 ↗</button><div id="tabList"></div><button id="managePlatforms" title="管理平台">＋</button></nav>
+  <section id="platformManager" class="platform-manager" hidden>
+    <div class="manager-head"><strong>侧栏平台</strong><span id="platformCount"></span></div>
+    <div id="platformOptions" class="platform-options"></div>
+  </section>
+  <main id="frameStack" class="frame-stack"></main>
+  <section id="templatePicker" class="template-picker" hidden>
+    <input id="templateSearch" type="search" placeholder="搜索操作…">
+    <div id="templateRecent" class="template-recent"></div>
+    <div id="templateList" class="template-list"></div>
+    <button id="manageTemplates" class="manage-templates">管理右键与快捷操作</button>
+  </section>
+  <div id="targetMenu" class="target-menu" hidden></div>
+  <section class="composer">
+    <div class="internal-controls" aria-hidden="true"><button id="templateToggle" tabindex="-1">选择操作</button><button id="targetToggle" tabindex="-1">选择平台</button><div id="activeTemplate" hidden><span id="activeTemplateLabel"></span><button id="templatePreview" tabindex="-1">预览</button><button id="clearTemplate" tabindex="-1">移除</button></div></div>
+    <textarea id="question" rows="3" maxlength="20000" placeholder="输入问题，同时询问多个 AI…"></textarea>
+    <div class="composer-actions">
+      <label class="file-button">📎 附件<input id="attachments" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.csv"></label>
+      <select id="answerMode" title="回答模式"><option value="expert">专家</option><option value="fast">快速</option></select>
+      <button id="send" class="primary">同时提问 ➤</button>
+    </div>
+    <div id="fileSummary" class="file-summary"></div><div id="status" role="status"></div>
+    <div id="statusActions" class="status-actions" hidden><button id="retryFailed">重试失败平台</button><button id="openActive">新标签页打开当前 AI</button></div>
+  </section>
+  <script src="../shared/services.js"></script><script src="../shared/platform-adapters.js"></script><script src="../shared/prompt-templates.js"></script><script src="../shared/privacy-ui.js"></script><script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "multi-ai-workbench",
+  "version": "0.4.1",
+  "private": true,
+  "description": "多AI问答助手：免费开源的多模型同时提问与答案对比浏览器扩展",
+  "author": "joelovechen",
+  "repository": { "type": "git", "url": "https://github.com/joelovechen/multi-ai-workbench.git" },
+  "bugs": { "url": "https://github.com/joelovechen/multi-ai-workbench/issues" },
+  "homepage": "https://github.com/joelovechen/multi-ai-workbench#readme",
+  "type": "module",
+  "scripts": {
+    "test": "node --test scripts/behavior-tests.mjs",
+    "verify": "node scripts/verify.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "license": "MIT"
+}
