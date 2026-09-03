@@ -1,11 +1,34 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>多AI侧栏</title><link rel="icon" type="image/png" href="../assets/launcher-pet.png"><link rel="stylesheet" href="styles.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>多AI侧栏</title><link rel="icon" type="image/png" href="../assets/launcher-pet.png"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="../shared/affiliate-catalog.css"></head>
 <body>
   <div id="sideNotice" class="side-notice" hidden></div>
-  <nav class="ai-tabs" aria-label="AI 平台标签"><button id="minimizePanel" class="minimize-tab" title="最小化为网页桌宠">收起</button><button id="openWorkspace" class="fullscreen-tab" title="打开完整工作台">全屏 ↗</button><div id="tabList"></div><button id="managePlatforms" title="管理平台">＋</button></nav>
+  <nav class="ai-tabs" aria-label="AI 平台切换">
+    <button id="minimizePanel" class="top-action minimize-tab" title="收起为网页桌宠" aria-label="收起为网页桌宠">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="13" rx="2"></rect><path d="m9 11 3 3 3-3"></path><path d="M8 20h8"></path></svg>
+    </button>
+    <button id="previousModel" class="carousel-arrow" title="上一个 AI" aria-label="切换到上一个 AI" aria-controls="tabList">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <div class="tab-rail"><div id="tabList" role="tablist" aria-label="已添加的 AI 平台"></div></div>
+    <button id="nextModel" class="carousel-arrow" title="下一个 AI" aria-label="切换到下一个 AI" aria-controls="tabList">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg>
+    </button>
+    <div class="top-actions">
+      <button id="affiliateToggle" class="top-action affiliate-tab" title="AI 工具精选 · 推广" aria-label="AI 工具精选 · 推广">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="9" width="16" height="11" rx="2"></rect><path d="M12 9v11M4 13h16M7 9c-2.4 0-3.5-3.2-1.4-4.4C8 3.2 12 9 12 9s4-5.8 6.4-4.4C20.5 5.8 19.4 9 17 9"></path></svg>
+      </button>
+      <button id="managePlatforms" class="top-action" title="添加或管理 AI 平台" aria-label="添加或管理 AI 平台" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+      <button id="openWorkspace" class="top-action fullscreen-tab" title="打开全屏工作台" aria-label="打开全屏工作台">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"></path></svg>
+      </button>
+    </div>
+  </nav>
   <section id="platformManager" class="platform-manager" hidden>
     <div class="manager-head"><strong>侧栏平台</strong><span id="platformCount"></span></div>
+    <label class="embed-layout-setting"><span><strong>页面宽度</strong><small>只影响侧栏中的第三方页面</small></span><select id="embedLayoutMode"><option value="adaptive">自动适应</option><option value="original">原始布局</option></select></label>
     <div id="platformOptions" class="platform-options"></div>
   </section>
   <main id="frameStack" class="frame-stack"></main>
@@ -27,6 +50,6 @@
     <div id="fileSummary" class="file-summary"></div><div id="status" role="status"></div>
     <div id="statusActions" class="status-actions" hidden><button id="retryFailed">重试失败平台</button><button id="openActive">新标签页打开当前 AI</button></div>
   </section>
-  <script src="../shared/services.js"></script><script src="../shared/platform-adapters.js"></script><script src="../shared/prompt-templates.js"></script><script src="../shared/privacy-ui.js"></script><script src="app.js"></script>
+  <script src="../shared/services.js"></script><script src="../shared/platform-adapters.js"></script><script src="../shared/prompt-templates.js"></script><script src="../shared/privacy-ui.js"></script><script src="../shared/affiliate-public-key.js"></script><script src="../shared/affiliate-catalog.js"></script><script src="app.js"></script>
 </body>
 </html>

@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "多AI问答助手",
-  "version": "0.4.1",
-  "description": "多模型同时提问与答案对比工具。并排查看、记录和导出回答，免费开源，无需产品账号。",
+  "name": "__MSG_extensionName__",
+  "short_name": "__MSG_extensionShortName__",
+  "version": "0.5.0",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "zh_CN",
   "homepage_url": "https://github.com/joelovechen/multi-ai-workbench",
   "permissions": ["tabs", "storage", "webNavigation", "declarativeNetRequest", "sidePanel", "contextMenus", "activeTab", "scripting"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
@@ -12,27 +14,28 @@
     "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
     "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*",
     "https://*.copilot.com/*", "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*",
-    "https://www.bing.com/*", "https://www.baidu.com/*", "https://weixin.sogou.com/*", "https://zhihu.sogou.com/*", "https://www.sogou.com/*"
+    "https://www.bing.com/*", "https://www.baidu.com/*", "https://weixin.sogou.com/*", "https://zhihu.sogou.com/*", "https://www.sogou.com/*",
+    "https://multi-ai-workbench-catalog.pages.dev/*", "https://joelovechen.github.io/multi-ai-workbench/*"
   ],
   "icons": { "16": "assets/launcher-pet.png", "32": "assets/launcher-pet.png", "48": "assets/launcher-pet.png", "128": "assets/launcher-pet.png" },
-  "action": { "default_title": "打开多AI问答助手", "default_icon": { "16": "assets/launcher-pet.png", "32": "assets/launcher-pet.png" } },
+  "action": { "default_title": "__MSG_actionTitle__", "default_icon": { "16": "assets/launcher-pet.png", "32": "assets/launcher-pet.png" } },
   "commands": {
     "ask-selection": {
       "suggested_key": { "default": "Alt+Shift+A", "mac": "Command+Shift+A" },
-      "description": "使用已选 AI 搜索选中的网页文字"
+      "description": "__MSG_commandAskSelection__"
     },
     "open-template-picker": {
       "suggested_key": { "default": "Alt+Shift+P", "mac": "Command+Shift+P" },
-      "description": "打开操作选择器处理选中的网页文字"
+      "description": "__MSG_commandOpenPicker__"
     },
-    "action-slot-1": { "suggested_key": { "default": "Alt+Shift+1", "mac": "Command+Shift+1" }, "description": "执行快捷操作 1" },
-    "action-slot-2": { "suggested_key": { "default": "Alt+Shift+2", "mac": "Command+Shift+2" }, "description": "执行快捷操作 2" },
-    "action-slot-3": { "description": "执行快捷操作 3" },
-    "action-slot-4": { "description": "执行快捷操作 4" },
-    "action-slot-5": { "description": "执行快捷操作 5" },
-    "action-slot-6": { "description": "执行快捷操作 6" },
-    "action-slot-7": { "description": "执行快捷操作 7" },
-    "action-slot-8": { "description": "执行快捷操作 8" }
+    "action-slot-1": { "suggested_key": { "default": "Alt+Shift+1", "mac": "Command+Shift+1" }, "description": "__MSG_commandActionSlot1__" },
+    "action-slot-2": { "suggested_key": { "default": "Alt+Shift+2", "mac": "Command+Shift+2" }, "description": "__MSG_commandActionSlot2__" },
+    "action-slot-3": { "description": "__MSG_commandActionSlot3__" },
+    "action-slot-4": { "description": "__MSG_commandActionSlot4__" },
+    "action-slot-5": { "description": "__MSG_commandActionSlot5__" },
+    "action-slot-6": { "description": "__MSG_commandActionSlot6__" },
+    "action-slot-7": { "description": "__MSG_commandActionSlot7__" },
+    "action-slot-8": { "description": "__MSG_commandActionSlot8__" }
   },
   "background": { "service_worker": "background/index.js" },
   "side_panel": { "default_path": "sidepanel/index.html" },
@@ -79,10 +82,25 @@
     }
   ],
   "declarative_net_request": {
-    "rule_resources": [{ "id": "embed_headers", "enabled": true, "path": "rules/embed-headers.json" }]
+    "rule_resources": [
+      { "id": "embed_deepseek", "enabled": true, "path": "rules/embed-deepseek.json" },
+      { "id": "embed_doubao", "enabled": true, "path": "rules/embed-doubao.json" },
+      { "id": "embed_yuanbao", "enabled": true, "path": "rules/embed-yuanbao.json" },
+      { "id": "embed_kimi", "enabled": true, "path": "rules/embed-kimi.json" },
+      { "id": "embed_zhipu", "enabled": true, "path": "rules/embed-zhipu.json" },
+      { "id": "embed_qianwen", "enabled": true, "path": "rules/embed-qianwen.json" },
+      { "id": "embed_minimax", "enabled": true, "path": "rules/embed-minimax.json" },
+      { "id": "embed_zhida", "enabled": true, "path": "rules/embed-zhida.json" },
+      { "id": "embed_chatgpt", "enabled": true, "path": "rules/embed-chatgpt.json" },
+      { "id": "embed_gemini", "enabled": true, "path": "rules/embed-gemini.json" },
+      { "id": "embed_copilot", "enabled": true, "path": "rules/embed-copilot.json" },
+      { "id": "embed_grok", "enabled": true, "path": "rules/embed-grok.json" },
+      { "id": "embed_claude", "enabled": true, "path": "rules/embed-claude.json" },
+      { "id": "embed_search", "enabled": true, "path": "rules/embed-search.json" }
+    ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https: http:;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io; img-src 'self' data: blob: https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io; frame-src https: http:;"
   },
   "web_accessible_resources": [{
     "resources": [

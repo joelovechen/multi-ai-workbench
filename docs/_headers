@@ -1,0 +1,11 @@
+/affiliate-catalog/catalog.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=60, must-revalidate
+
+/affiliate-catalog/catalog.sig
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=60, must-revalidate
+
+/affiliate-catalog/icons/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000, immutable

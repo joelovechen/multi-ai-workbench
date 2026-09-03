@@ -2,37 +2,67 @@
   "use strict";
   const registry = globalThis.MultiAIServiceRegistry, promptTemplates = globalThis.MultiAIPromptTemplates;
   const $ = (selector) => document.querySelector(selector);
-  const state = { services: [], targets: new Set(), active: "", answerMode: "expert", files: [], ready: new Set(), statuses: new Map(), operations: [], groups: [], activeActionId: "", recentActionIds: [], actionContext: {}, failedServices: new Set(), lastPayload: null, lastSent: null };
-  const pending = new Map(), readyOrigins = new Map(); let draftTimer = 0, initialized = false, deferredTask = null;
+  const sidepanelServices = [...registry.defaults, ...registry.ai.map((service) => service.key).filter((key) => !registry.defaults.includes(key))];
+  const sidepanelMaxFrames = registry.ai.length, sidepanelCatalogVersion = 2;
+  const state = { services: [], targets: new Set(), active: "", locale: "zh", answerMode: "expert", embedLayoutMode: "adaptive", files: [], ready: new Set(), statuses: new Map(), operations: [], groups: [], activeActionId: "", recentActionIds: [], actionContext: {}, failedServices: new Set(), lastPayload: null, lastSent: null };
+  const pending = new Map(), readyOrigins = new Map(); let draftTimer = 0, initialized = false, deferredTask = null, lastCarouselWheelAt = 0, affiliateController = null;
 
   function setStatus(message, error = false) { const node = $("#status"); node.textContent = message; node.classList.toggle("error", error); }
-  async function persist() { await chrome.storage.local.set({ "maiw.sidepanel": { services: state.services, targets: [...state.targets], active: state.active, answerMode: state.answerMode, recentActionIds: state.recentActionIds }, "maiw.sidepanelDraft": { text: $("#question").value, actionId: state.activeActionId } }); }
+  async function persist() { await chrome.storage.local.set({ "maiw.sidepanel": { services: state.services, targets: [...state.targets], active: state.active, answerMode: state.answerMode, embedLayoutMode: state.embedLayoutMode, recentActionIds: state.recentActionIds, catalogVersion: sidepanelCatalogVersion }, "maiw.sidepanelDraft": { text: $("#question").value, actionId: state.activeActionId } }); }
   function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => void persist(), 250); }
   function statusLabel(status) { return { pending: "正在发送", ok: "已确认", error: "发送失败", login: "需要登录", unread: "已完成" }[status] || ""; }
 
+  function activateTab(key) {
+    if (!state.services.includes(key)) return;
+    state.active = key; if (state.statuses.get(key) === "unread") state.statuses.set(key, "ok");
+    ensureFrameLoaded(key);
+    for (const frame of document.querySelectorAll(".ai-frame")) frame.classList.toggle("active", frame.dataset.service === key);
+    renderTabs(); void persist();
+  }
+
+  function rotateModel(direction) {
+    if (state.services.length < 2) return;
+    const current = Math.max(0, state.services.indexOf(state.active)), next = (current + direction + state.services.length) % state.services.length;
+    activateTab(state.services[next]);
+  }
+
   function renderTabs() {
-    const list = $("#tabList"); list.replaceChildren();
-    for (const key of state.services) {
-      const service = registry.byKey[key]; if (!service) continue;
-      const status = state.statuses.get(key) || "", button = document.createElement("button");
-      button.className = `ai-tab${state.active === key ? " active" : ""}`; button.dataset.service = key; button.dataset.status = status; button.textContent = service.name; button.title = statusLabel(status) || `切换到 ${service.name}`;
-      button.addEventListener("click", () => { state.active = key; if (state.statuses.get(key) === "unread") state.statuses.set(key, "ok"); for (const frame of document.querySelectorAll(".ai-frame")) frame.classList.toggle("active", frame.dataset.service === key); renderTabs(); void persist(); }); list.append(button);
-    }
+    const list = $("#tabList"), existing = new Map([...list.querySelectorAll(".ai-tab")].map((button) => [button.dataset.service, button])), activeIndex = Math.max(0, state.services.indexOf(state.active)), length = state.services.length;
+    for (const [key, button] of existing) if (!state.services.includes(key)) button.remove();
+    state.services.forEach((key, index) => {
+      const service = registry.byKey[key]; if (!service) return;
+      const status = state.statuses.get(key) || "", selected = state.active === key; let button = existing.get(key);
+      if (!button) {
+        const iconWrap = document.createElement("span"), icon = document.createElement("img"), fallback = document.createElement("span"); button = document.createElement("button"); button.className = "ai-tab"; button.dataset.service = key; button.type = "button"; button.setAttribute("role", "tab");
+        iconWrap.className = "ai-tab-icon-wrap"; icon.className = "ai-tab-icon"; icon.src = chrome.runtime.getURL(`assets/platform-icons/${key}.png`); icon.alt = ""; icon.addEventListener("error", () => icon.classList.add("is-broken"), { once: true }); fallback.className = "ai-tab-fallback"; fallback.textContent = service.name.slice(0, 2); iconWrap.append(icon, fallback); button.append(iconWrap);
+        button.addEventListener("click", () => activateTab(key)); button.addEventListener("keydown", (event) => { if (event.key === "ArrowLeft") rotateModel(-1); else if (event.key === "ArrowRight") rotateModel(1); else if (event.key === "Home") activateTab(state.services[0]); else if (event.key === "End") activateTab(state.services.at(-1)); else return; event.preventDefault(); requestAnimationFrame(() => list.querySelector(".ai-tab.active")?.focus()); }); list.append(button);
+      }
+      let offset = index - activeIndex; const half = Math.floor(length / 2); if (offset > half) offset -= length; if (offset < -half) offset += length; const distance = Math.abs(offset), scale = distance === 0 ? 1.08 : distance === 1 ? .96 : distance === 2 ? .86 : .76;
+      button.className = `ai-tab${selected ? " active" : ""}`; button.dataset.service = key; button.dataset.status = status; button.type = "button"; button.setAttribute("role", "tab"); button.setAttribute("aria-selected", String(selected)); button.setAttribute("aria-label", `${service.name}${statusLabel(status) ? `，${statusLabel(status)}` : ""}`); button.title = statusLabel(status) ? `${service.name} · ${statusLabel(status)}` : `切换到 ${service.name}`;
+      button.dataset.carouselOffset = String(offset); button.dataset.carouselDistance = String(distance); button.tabIndex = selected ? 0 : -1; button.setAttribute("aria-hidden", String(distance > 3)); button.style.setProperty("--carousel-x", `${offset * 37}px`); button.style.setProperty("--carousel-scale", String(scale)); button.style.setProperty("--carousel-opacity", distance === 0 ? "1" : distance === 1 ? ".92" : distance === 2 ? ".62" : distance === 3 ? ".24" : "0"); button.style.zIndex = String(20 - Math.min(distance, 10));
+      list.append(button);
+    });
+    $("#previousModel").disabled = state.services.length < 2; $("#nextModel").disabled = state.services.length < 2;
   }
 
   function renderFrames() {
     const stack = $("#frameStack"); stack.replaceChildren(); state.ready.clear(); readyOrigins.clear();
     for (const key of state.services) {
-      const iframe = document.createElement("iframe"); iframe.className = `ai-frame${state.active === key ? " active" : ""}`; iframe.dataset.service = key; iframe.src = registry.byKey[key].home; iframe.title = registry.byKey[key].name;
+      const iframe = document.createElement("iframe"), shouldLoad = key === state.active || state.targets.has(key); iframe.className = `ai-frame${state.active === key ? " active" : ""}`; iframe.dataset.service = key; iframe.dataset.home = registry.byKey[key].home; iframe.dataset.loaded = String(shouldLoad); iframe.src = shouldLoad ? registry.byKey[key].home : "about:blank"; iframe.title = registry.byKey[key].name;
       iframe.addEventListener("load", () => { state.ready.delete(key); readyOrigins.delete(key); if (!state.failedServices.has(key)) state.statuses.set(key, ""); renderTabs(); }); stack.append(iframe);
     }
     renderTabs(); renderTargets();
   }
 
+  function ensureFrameLoaded(key) {
+    const iframe = document.querySelector(`.ai-frame[data-service="${CSS.escape(key)}"]`); if (!iframe || iframe.dataset.loaded === "true") return false;
+    iframe.dataset.loaded = "true"; iframe.src = iframe.dataset.home || registry.byKey[key]?.home || "about:blank"; return true;
+  }
+
   function renderManager() {
-    const holder = $("#platformOptions"); holder.replaceChildren(); $("#platformCount").textContent = `${state.services.length}/${registry.maxFrames}`;
+    const holder = $("#platformOptions"); holder.replaceChildren(); $("#platformCount").textContent = `${state.services.length}/${sidepanelMaxFrames}`;
     for (const service of registry.ai) {
-      const label = document.createElement("label"), input = document.createElement("input"); label.className = "platform-option"; input.type = "checkbox"; input.checked = state.services.includes(service.key); input.disabled = !input.checked && state.services.length >= registry.maxFrames;
+      const label = document.createElement("label"), input = document.createElement("input"); label.className = "platform-option"; input.type = "checkbox"; input.checked = state.services.includes(service.key); input.disabled = !input.checked && state.services.length >= sidepanelMaxFrames;
       input.addEventListener("change", async () => { if (input.checked) state.services.push(service.key); else state.services = state.services.filter((key) => key !== service.key); if (!state.services.length) { state.services = [service.key]; input.checked = true; return setStatus("侧栏至少保留一个 AI。", true); } state.targets = new Set([...state.targets].filter((key) => state.services.includes(key))); if (input.checked) state.targets.add(service.key); if (!state.services.includes(state.active)) state.active = state.services[0]; renderManager(); renderFrames(); await persist(); });
       label.append(input, document.createTextNode(service.name)); holder.append(label);
     }
@@ -42,7 +72,7 @@
     const menu = $("#targetMenu"); menu.replaceChildren();
     for (const key of state.services) {
       const label = document.createElement("label"), input = document.createElement("input"); label.className = "target-option"; input.type = "checkbox"; input.checked = state.targets.has(key);
-      input.addEventListener("change", () => { if (input.checked) state.targets.add(key); else state.targets.delete(key); renderTargets(); void persist(); }); label.append(input, document.createTextNode(registry.byKey[key].name)); menu.append(label);
+      input.addEventListener("change", () => { if (input.checked) { state.targets.add(key); ensureFrameLoaded(key); } else state.targets.delete(key); renderTargets(); void persist(); }); label.append(input, document.createTextNode(registry.byKey[key].name)); menu.append(label);
     }
     const count = state.targets.size; $("#targetToggle").textContent = count === state.services.length ? `全部 ${count} 个 AI⌄` : `${count} 个 AI⌄`;
   }
@@ -58,8 +88,8 @@
     if (!operation) return;
     applyTemplate(operation.id, context);
     if (operation.targetMode === "fixed") {
-      const fixed = operation.serviceKeys.filter((key) => registry.byKey[key]?.kind === "ai").slice(0, registry.maxFrames);
-      const merged = [...new Set([...state.services, ...fixed])].slice(-registry.maxFrames); const changed = merged.join() !== state.services.join(); state.services = merged; state.targets = new Set(fixed);
+      const fixed = operation.serviceKeys.filter((key) => registry.byKey[key]?.kind === "ai").slice(0, sidepanelMaxFrames);
+      const merged = [...new Set([...state.services, ...fixed])].slice(-sidepanelMaxFrames); const changed = merged.join() !== state.services.join(); state.services = merged; state.targets = new Set(fixed);
       if (fixed.length) state.active = fixed[0]; if (changed) { renderFrames(); renderManager(); } else { for (const frame of document.querySelectorAll(".ai-frame")) frame.classList.toggle("active", frame.dataset.service === state.active); renderTabs(); renderTargets(); }
     } else if (operation.targetMode === "active") { state.targets = new Set([state.active]); renderTargets(); }
     else if (operation.targetMode === "ask") { $("#targetMenu").hidden = false; renderTargets(); execute = false; }
@@ -88,11 +118,12 @@
     const iframe = document.querySelector(`.ai-frame[data-service="${CSS.escape(key)}"]`); if (!iframe?.contentWindow) return { ok: false, reason: "frame_missing" }; if (!await waitUntilReady(key)) return { ok: false, reason: "frame_not_ready" };
     const requestId = crypto.randomUUID(); return new Promise((resolve) => { const timer = setTimeout(() => { pending.delete(requestId); resolve({ ok: false, reason: "sidepanel_command_timeout" }); }, 30000); pending.set(requestId, (result) => { clearTimeout(timer); resolve(result); }); iframe.contentWindow.postMessage({ source: "multi-ai-sidepanel", requestId, service: key, action, ...payload }, readyOrigins.get(key)); });
   }
+  async function applyEmbedLayoutToReadyFrames() { await Promise.allSettled([...state.ready].map((key) => frameCommand(key, "SET_EMBED_LAYOUT", { mode: state.embedLayoutMode }))); }
 
   addEventListener("message", (event) => {
     const data = event.data; if (!data || !["multi-ai-sidepanel-ready", "multi-ai-sidepanel-result"].includes(data.source)) return;
     const iframe = [...document.querySelectorAll(".ai-frame")].find((frame) => frame.contentWindow === event.source); if (!iframe || iframe.dataset.service !== data.service || registry.fromUrl(event.origin)?.key !== data.service) return;
-    if (data.source === "multi-ai-sidepanel-ready") { state.ready.add(data.service); readyOrigins.set(data.service, event.origin); return; } if (readyOrigins.get(data.service) !== event.origin) return;
+    if (data.source === "multi-ai-sidepanel-ready") { state.ready.add(data.service); readyOrigins.set(data.service, event.origin); queueMicrotask(() => void frameCommand(data.service, "SET_EMBED_LAYOUT", { mode: state.embedLayoutMode })); return; } if (readyOrigins.get(data.service) !== event.origin) return;
     const complete = pending.get(data.requestId); if (!complete) return; pending.delete(data.requestId); complete(data.result || { ok: false, reason: "empty_response" });
   });
 
@@ -103,7 +134,7 @@
     const sourceText = options.sourceText || $("#question").value.trim(), question = options.question || composedQuestion(), targets = (options.targets || [...state.targets]).filter((key) => state.services.includes(key));
     if (!sourceText) return setStatus("请先输入问题。", true); if (!targets.length) return setStatus("请至少选择一个发送平台。", true);
     if (!options.retry && state.lastSent?.sourceText === sourceText && Date.now() - state.lastSent.at < 10000 && !confirm("刚刚已经发送过相同问题，仍然发送吗？")) return;
-    $("#send").disabled = true; $("#statusActions").hidden = true; updateFrameInset(); setStatus(`正在发送到 ${targets.length} 个 AI…`); for (const key of targets) state.statuses.set(key, "pending"); renderTabs();
+    $("#send").disabled = true; $("#statusActions").hidden = true; updateFrameInset(); setStatus(`正在发送到 ${targets.length} 个 AI…`); for (const key of targets) { state.statuses.set(key, "pending"); ensureFrameLoaded(key); } renderTabs();
     try {
       const attachments = options.attachments || await Promise.all(state.files.map(fileToPayload)), configuredMode = activeTemplate()?.answerMode, answerMode = ["expert", "fast"].includes(configuredMode) ? configuredMode : state.answerMode; state.lastPayload = { question, sourceText, attachments, answerMode, targets }; state.lastSent = { sourceText, at: Date.now() };
       const results = await Promise.all(targets.map(async (key) => { const result = await frameCommand(key, "SEND_PROMPT", { question, attachments, answerMode }); state.statuses.set(key, result.ok ? (state.active === key ? "ok" : "unread") : "error"); renderTabs(); return { service: key, ...result }; }));
@@ -121,21 +152,26 @@
 
   async function initialize() {
     const stored = await chrome.storage.local.get(["maiw.sidepanel", "maiw.sidepanelDraft", "maiw.settings", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups"]), saved = stored["maiw.sidepanel"] || {}, draft = stored["maiw.sidepanelDraft"] || {}, main = stored["maiw.settings"] || {};
-    await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: main.locale });
+    const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: main.locale }); state.locale = consent.locale;
     const configuration = promptTemplates.resolveConfiguration(stored["maiw.operations"], stored["maiw.operationGroups"], stored["maiw.promptTemplates"], main.promptMenuTemplateIds); state.operations = configuration.operations; state.groups = configuration.groups; if (configuration.migrated) await chrome.storage.local.set({ "maiw.operations": state.operations, "maiw.operationGroups": state.groups });
-    const candidates = (Array.isArray(saved.services) ? saved.services : main.services || registry.defaults).filter((key) => registry.byKey[key]?.kind === "ai").slice(0, registry.maxFrames); state.services = candidates.length ? candidates : [...registry.defaults]; state.active = state.services.includes(saved.active) ? saved.active : state.services[0];
-    const targets = Array.isArray(saved.targets) ? saved.targets.filter((key) => state.services.includes(key)) : state.services; state.targets = new Set(targets.length ? targets : state.services); state.answerMode = saved.answerMode === "fast" ? "fast" : "expert"; state.recentActionIds = (Array.isArray(saved.recentActionIds) ? saved.recentActionIds : saved.recentTemplateIds || []).slice(0, 5);
-    $("#answerMode").value = state.answerMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker();
+    const catalogMigrated = Number(saved.catalogVersion || 0) < sidepanelCatalogVersion;
+    const candidates = (catalogMigrated ? sidepanelServices : Array.isArray(saved.services) ? saved.services : sidepanelServices).filter((key) => registry.byKey[key]?.kind === "ai").slice(0, sidepanelMaxFrames); state.services = candidates.length ? candidates : [...sidepanelServices]; state.active = state.services.includes(saved.active) ? saved.active : "deepseek";
+    const targets = Array.isArray(saved.targets) ? saved.targets.filter((key) => state.services.includes(key)) : registry.defaults; state.targets = new Set(targets.length ? targets : registry.defaults); state.answerMode = saved.answerMode === "fast" ? "fast" : "expert"; state.embedLayoutMode = saved.embedLayoutMode === "original" ? "original" : "adaptive"; state.recentActionIds = (Array.isArray(saved.recentActionIds) ? saved.recentActionIds : saved.recentTemplateIds || []).slice(0, 5);
+    $("#answerMode").value = state.answerMode; $("#embedLayoutMode").value = state.embedLayoutMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale, compact: true }); if (catalogMigrated) await persist();
     if (chrome.sidePanel?.getLayout) { try { const layout = await chrome.sidePanel.getLayout(); if (layout.side === "left") { const notice = $("#sideNotice"); notice.textContent = "浏览器当前把原生侧栏放在左侧；请在浏览器外观设置中切换到右侧。"; notice.hidden = false; } } catch { /* 旧版浏览器不支持读取方向 */ } }
     initialized = true; const pendingTask = deferredTask || (await chrome.storage.session.get("maiw.pendingTask"))["maiw.pendingTask"]; deferredTask = null; if (pendingTask) await consumePendingTask(pendingTask);
   }
 
-  $("#managePlatforms").addEventListener("click", () => { $("#platformManager").hidden = !$("#platformManager").hidden; renderManager(); });
+  $("#managePlatforms").addEventListener("click", () => { const manager = $("#platformManager"), opening = manager.hidden; manager.hidden = !opening; $("#managePlatforms").setAttribute("aria-expanded", String(opening)); renderManager(); });
+  $("#previousModel").addEventListener("click", () => rotateModel(-1));
+  $("#nextModel").addEventListener("click", () => rotateModel(1));
+  $("#tabList").addEventListener("wheel", (event) => { const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX; if (!delta) return; event.preventDefault(); const now = Date.now(); if (now - lastCarouselWheelAt < 180) return; lastCarouselWheelAt = now; rotateModel(delta > 0 ? 1 : -1); }, { passive: false });
   $("#targetToggle").addEventListener("click", () => { $("#targetMenu").hidden = !$("#targetMenu").hidden; $("#templatePicker").hidden = true; });
   $("#templateToggle").addEventListener("click", () => { $("#templatePicker").hidden = !$("#templatePicker").hidden; $("#targetMenu").hidden = true; if (!$("#templatePicker").hidden) { renderTemplatePicker($("#templateSearch").value); $("#templateSearch").focus(); } });
   $("#templateSearch").addEventListener("input", (event) => renderTemplatePicker(event.target.value)); $("#clearTemplate").addEventListener("click", () => applyTemplate("")); $("#templatePreview").addEventListener("click", () => alert(composedQuestion() || "请先输入内容。"));
   $("#manageTemplates").addEventListener("click", async () => { await chrome.storage.session.set({ "maiw.openSettings": "operations" }); const currentWindow = await chrome.windows.getCurrent(); await chrome.runtime.sendMessage({ action: "OPEN_WORKSPACE", windowId: currentWindow.id }); });
   $("#answerMode").addEventListener("change", (event) => { state.answerMode = event.target.value; void persist(); }); $("#question").addEventListener("input", scheduleDraftSave);
+  $("#embedLayoutMode").addEventListener("change", async (event) => { state.embedLayoutMode = event.target.value === "original" ? "original" : "adaptive"; await persist(); await applyEmbedLayoutToReadyFrames(); setStatus(state.embedLayoutMode === "adaptive" ? "已启用侧栏自动适应宽度。" : "已恢复平台原始布局。"); });
   $("#attachments").addEventListener("change", (event) => { try { state.files = validateFiles(event.target.files); $("#fileSummary").textContent = state.files.map((file) => file.name).join("、"); setStatus(""); } catch (error) { state.files = []; event.target.value = ""; setStatus(error.message, true); } });
   $("#send").addEventListener("click", () => void ask()); $("#question").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } });
   $("#retryFailed").addEventListener("click", () => { if (state.lastPayload && state.failedServices.size) void ask({ retry: true, targets: [...state.failedServices], attachments: state.lastPayload.attachments, question: state.lastPayload.question, sourceText: state.lastPayload.sourceText }); }); $("#openActive").addEventListener("click", () => chrome.tabs.create({ url: registry.byKey[state.active]?.home }));

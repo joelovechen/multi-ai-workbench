@@ -1,0 +1,16 @@
+{
+  "extensionName": { "message": "多AI问答助手（侧栏实验）" },
+  "extensionShortName": { "message": "多AI实验" },
+  "extensionDescription": { "message": "同时向多个 AI 官方网页提问，并排或在侧栏切换比较回答；支持本地提示词、历史、划线笔记与导出。" },
+  "actionTitle": { "message": "打开多AI问答助手" },
+  "commandAskSelection": { "message": "使用已选 AI 处理选中的网页文字" },
+  "commandOpenPicker": { "message": "打开操作选择器处理选中的网页文字" },
+  "commandActionSlot1": { "message": "执行快捷操作 1" },
+  "commandActionSlot2": { "message": "执行快捷操作 2" },
+  "commandActionSlot3": { "message": "执行快捷操作 3" },
+  "commandActionSlot4": { "message": "执行快捷操作 4" },
+  "commandActionSlot5": { "message": "执行快捷操作 5" },
+  "commandActionSlot6": { "message": "执行快捷操作 6" },
+  "commandActionSlot7": { "message": "执行快捷操作 7" },
+  "commandActionSlot8": { "message": "执行快捷操作 8" }
+}

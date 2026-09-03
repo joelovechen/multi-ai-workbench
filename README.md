@@ -38,7 +38,7 @@ The supported AI websites can change their DOM and embedding policies. Passing a
 
 ## Privacy
 
-The extension has no product account, telemetry, API-key hosting, advertising SDK, or operator-run prompt proxy. Questions, selected text, and attachments are sent directly to services chosen by the user only after a user action. See [PRIVACY.md](PRIVACY.md).
+The extension has no product account, telemetry, API-key hosting, advertising SDK, or operator-run prompt proxy. Questions, selected text, and attachments are sent directly to services chosen by the user only after a user action. An optional Featured AI Tools entry contains clearly labeled affiliate links; its signed catalog is fetched from GitHub Pages and Cloudflare Pages without extension-operated click tracking. See [PRIVACY.md](PRIVACY.md).
 
 ## Developer and support
 
@@ -49,4 +49,3 @@ The extension has no product account, telemetry, API-key hosting, advertising SD
 ## License
 
 The source code is released under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for redistributed asset notices.
-

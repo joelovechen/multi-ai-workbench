@@ -13,6 +13,7 @@
     exportPanel: $("#exportPanel"), exportList: $("#exportList"), notesPanel: $("#notesPanel"), notesList: $("#notesList"), backdrop: $("#drawerBackdrop")
   };
   const serviceIconFiles = { doubao: "doubao.png", kimi: "kimi.png", deepseek: "deepseek.svg", zhipu: "zhipu.png", qianwen: "qianwen.png", yuanbao: "yuanbao.png", minimax: "minimax.png", zhida: "zhida.png", chatgpt: "chatgpt.png", gemini: "gemini.png", copilot: "copilot.png", grok: "grok.png", claude: "claude.png", google: "google.png", bing: "bing.ico", baidu: "baidu.png", wechat: "wechat.png", zhihu: "zhihu.ico" };
+  let affiliateController = null;
 
   const storageGet = (keys) => chrome.storage.local.get(keys);
   const storageSet = (value) => chrome.storage.local.set(value);
@@ -245,11 +246,13 @@
     $("#newChat").title = en ? "New chat" : "新对话"; $("#newChat").setAttribute("aria-label", $("#newChat").title);
     $("#historyToggle").title = en ? "History" : "历史记录"; $("#historyToggle").setAttribute("aria-label", $("#historyToggle").title);
     $("#settingsToggle").title = en ? "Settings" : "配置"; $("#settingsToggle").setAttribute("aria-label", $("#settingsToggle").title);
+    $("#affiliateSettingTitle").textContent = en ? "Featured AI Tools" : "AI 工具精选";
+    $("#affiliateSettingHint").textContent = en ? "Shows an optional, clearly labeled sponsored-link entry in the toolbar" : "顶部入口包含明确标注的可选推广链接";
     elements.add.title = en ? "Manage platforms" : "管理平台（添加、移除和排序）"; elements.add.setAttribute("aria-label", en ? "Manage platforms" : "管理平台");
     elements.question.placeholder = en ? "Ask multiple AI services at once…" : "输入一个问题，同时询问多个 AI…"; elements.send.textContent = en ? "Send to all" : "同时提问";
     $("#attachLabel").childNodes[0].nodeValue = en ? "Add files" : "添加附件";
     for (const button of [$("#historyClose"), $("#exportClose"), $("#notesClose"), $("#serviceClose"), $("#settingsClose")]) button.setAttribute("aria-label", en ? "Close" : "关闭");
-    $("#locale").value = state.locale;
+    $("#locale").value = state.locale; affiliateController?.setLocale(state.locale);
   }
 
   function fileToPayload(file) {
@@ -496,7 +499,7 @@
   }
 
   async function initialize() {
-    const stored = await storageGet(["maiw.settings", "maiw.history", "maiw.guideSeen", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups"]);
+    const stored = await storageGet(["maiw.settings", "maiw.history", "maiw.guideSeen", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups", "maiw.affiliateCatalog.preferences"]);
     const settings = stored["maiw.settings"] || {};
     const validServices = Array.isArray(settings.services) ? settings.services.filter((key) => registry.byKey[key]).slice(0, registry.maxFrames) : null;
     if (validServices?.length) state.services = validServices;
@@ -523,8 +526,8 @@
     state.currentSessionId = typeof settings.currentSessionId === "string" ? settings.currentSessionId : "";
     if (state.openBehavior === "new" || !state.history.some((row) => row.id === state.currentSessionId)) createSession();
     else state.frameUrls = sanitizeFrameUrls(state.history.find((row) => row.id === state.currentSessionId)?.urls, true);
-    document.documentElement.dataset.theme = state.theme; renderFrames(); renderHistory(); renderQuestionRail(); applyLocale();
-    $("#openBehavior").value = state.openBehavior; $("#answerMode").value = state.answerMode; $("#settingsAnswerMode").value = state.answerMode; $("#launcherScope").value = state.launcherScope; $("#launcherStyle").value = state.launcherStyle; $("#launcherAnimationPack").value = state.launcherAnimationPack; $("#launcherRandomFrequency").value = state.launcherRandomFrequency; $("#launcherSize").value = String(state.launcherSize); $("#launcherSizeValue").value = `${state.launcherSize} px`; $("#contextMenuMode").value = state.contextMenuMode; const commands = await chrome.commands.getAll(); state.commandShortcuts = Object.fromEntries(commands.map((row) => [row.name, row.shortcut])); renderPromptTemplates();
+    document.documentElement.dataset.theme = state.theme; renderFrames(); renderHistory(); renderQuestionRail(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale }); applyLocale();
+    $("#openBehavior").value = state.openBehavior; $("#answerMode").value = state.answerMode; $("#settingsAnswerMode").value = state.answerMode; $("#launcherScope").value = state.launcherScope; $("#launcherStyle").value = state.launcherStyle; $("#launcherAnimationPack").value = state.launcherAnimationPack; $("#launcherRandomFrequency").value = state.launcherRandomFrequency; $("#launcherSize").value = String(state.launcherSize); $("#launcherSizeValue").value = `${state.launcherSize} px`; $("#affiliateEntryVisible").checked = stored["maiw.affiliateCatalog.preferences"]?.showEntry !== false; $("#contextMenuMode").value = state.contextMenuMode; const commands = await chrome.commands.getAll(); state.commandShortcuts = Object.fromEntries(commands.map((row) => [row.name, row.shortcut])); renderPromptTemplates();
     requestAnimationFrame(() => {
       if (state.composerPosition) clampComposerPosition();
       else if (settings.questionPosition === "top") clampComposerPosition({ x: (innerWidth - elements.composer.getBoundingClientRect().width) / 2, y: 78 });
@@ -561,6 +564,7 @@
   });
   $("#minimizeToggle").addEventListener("click", async () => { if (typeof state.workspaceWindowId === "number") await sendRuntime({ action: "MINIMIZE_UI", windowId: state.workspaceWindowId }); });
   $("#locale").addEventListener("change", async (event) => { state.locale = event.target.value; applyLocale(); await persistSettings(); });
+  $("#affiliateEntryVisible").addEventListener("change", async (event) => { await storageSet({ "maiw.affiliateCatalog.preferences": { showEntry: event.target.checked } }); await affiliateController?.syncVisibility(); });
   $("#openBehavior").addEventListener("change", (event) => { state.openBehavior = event.target.value; persistSettings(); });
   $("#answerMode").addEventListener("change", (event) => { state.answerMode = event.target.value; $("#settingsAnswerMode").value = state.answerMode; persistSettings(); });
   $("#settingsAnswerMode").addEventListener("change", (event) => { state.answerMode = event.target.value; $("#answerMode").value = state.answerMode; persistSettings(); });

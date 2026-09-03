@@ -1,0 +1,1 @@
+[{"id":112,"priority":1,"action":{"type":"modifyHeaders","responseHeaders":[{"header":"content-security-policy","operation":"remove"},{"header":"content-security-policy-report-only","operation":"remove"},{"header":"x-frame-options","operation":"remove"}]},"condition":{"requestDomains":["grok.com"],"resourceTypes":["sub_frame"]}}]

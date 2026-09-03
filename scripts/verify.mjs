@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { createPublicKey, verify as verifySignature } from "node:crypto";
 import vm from "node:vm";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -10,10 +11,10 @@ const petAnimations = [
   "pet-random-look.webm", "pet-random-yawn.webm", "pet-random-stretch.webm", "pet-random-cube.webm", "pet-random-code.webm", "pet-random-snack.webm", "pet-random-hum.webm", "pet-random-dance.webm", "pet-random-think.webm"
 ].map((name) => `assets/pet/${name}`);
 const required = [
-  "manifest.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js",
+  "manifest.json", "_locales/zh_CN/messages.json", "_locales/en/messages.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js",
   "shared/platform-adapters.js", "shared/prompt-templates.js", "scripts/behavior-tests.mjs",
-  "shared/export-core.js",
-  "workspace/index.html", "workspace/app.js", "workspace/styles.css", "rules/embed-headers.json",
+  "shared/export-core.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/affiliate-catalog.css",
+  "workspace/index.html", "workspace/app.js", "workspace/styles.css",
   "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css",
   "README.md", "PRIVACY.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "assets/launcher-pet.png", ...petAnimations, "shared/privacy-ui.js", "privacy/index.html", "privacy/styles.css", "privacy/app.js"
 ];
@@ -36,7 +37,17 @@ for (const file of petAnimations) {
 
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
 check(manifest.manifest_version === 3, "manifest_version 必须为 3");
-check(manifest.name === "多AI问答助手", "Manifest 产品名不一致");
+check(manifest.name === "__MSG_extensionName__" && manifest.default_locale === "zh_CN", "Manifest 商店名称未接入默认本地化");
+check(manifest.version === "0.5.0", "Manifest 商店候选版本必须为 0.5.0");
+for (const locale of ["zh_CN", "en"]) {
+  const messages = JSON.parse(readFileSync(join(root, `_locales/${locale}/messages.json`), "utf8"));
+  for (const key of ["extensionName", "extensionShortName", "extensionDescription", "actionTitle", "commandAskSelection", "commandOpenPicker", ...Array.from({ length: 8 }, (_, index) => `commandActionSlot${index + 1}`)]) {
+    check(typeof messages[key]?.message === "string" && messages[key].message.trim(), `${locale} 缺少本地化消息：${key}`);
+  }
+  check(messages.extensionName.message.length <= 45, `${locale} 扩展名称超过 45 个字符`);
+  check(messages.extensionShortName.message.length <= 12, `${locale} 扩展短名称超过 12 个字符`);
+  check(messages.extensionDescription.message.length <= 132, `${locale} Manifest 描述超过 132 个字符`);
+}
 check(!manifest.permissions?.includes("identity"), "不得申请 identity 登录权限");
 check(!manifest.permissions?.includes("cookies"), "不得申请 cookies 权限");
 check(["contextMenus", "activeTab", "scripting"].every((permission) => manifest.permissions?.includes(permission)), "选中文字入口缺少最小必要权限");
@@ -50,6 +61,19 @@ check(petAnimations.every((asset) => manifest.web_accessible_resources?.some((en
 check(Object.values(manifest.icons || {}).every((path) => path === "assets/launcher-pet.png") && manifest.action?.default_icon?.["16"] === "assets/launcher-pet.png", "扩展图标未使用图片桌宠素材");
 check(["workspace/index.html", "sidepanel/index.html", "privacy/index.html"].every((file) => readFileSync(join(root, file), "utf8").includes('rel="icon" type="image/png" href="../assets/launcher-pet.png"')), "扩展页面 favicon 未统一使用产品图标");
 check(manifest.permissions?.includes("sidePanel") && manifest.side_panel?.default_path === "sidepanel/index.html", "原生侧栏权限或入口缺失");
+for (const origin of ["https://multi-ai-workbench-catalog.pages.dev/*", "https://joelovechen.github.io/multi-ai-workbench/*"]) check(manifest.host_permissions?.includes(origin), `推广目录缺少精确主机权限：${origin}`);
+check(manifest.content_security_policy?.extension_pages?.includes("connect-src 'self' https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io"), "推广目录 CSP 连接来源不完整");
+
+const catalogPayload = readFileSync(join(root, "docs/affiliate-catalog/catalog.json"));
+const catalogSignature = Buffer.from(readFileSync(join(root, "docs/affiliate-catalog/catalog.sig"), "utf8").trim(), "base64");
+const publicKeySource = readFileSync(join(root, "shared/affiliate-public-key.js"), "utf8");
+const publicKeyBase64 = publicKeySource.match(/MultiAIAffiliatePublicKey="([A-Za-z0-9+/=]+)"/)?.[1];
+try {
+  const publicKey = createPublicKey({ key: Buffer.from(publicKeyBase64 || "", "base64"), type: "spki", format: "der" });
+  check(verifySignature("sha256", catalogPayload, { key: publicKey, dsaEncoding: "ieee-p1363" }, catalogSignature), "推广目录签名验证失败");
+} catch (error) {
+  failures.push(`推广目录公钥或签名无效：${error.message}`);
+}
 
 const sandbox = { self: {}, URL };
 vm.runInNewContext(readFileSync(join(root, "shared/services.js"), "utf8"), sandbox);
@@ -79,17 +103,25 @@ for (const signal of ["selectionText", "maiw.pendingTask", "rebuildContextMenus"
 const sidepanelSource = readFileSync(join(root, "sidepanel/app.js"), "utf8");
 for (const signal of ["consumePendingTask", "maiw.sidepanelDraft", "failedServices", "composedQuestion"]) check(sidepanelSource.includes(signal), `侧栏易用性链缺少实现信号：${signal}`);
 const privacySource = readFileSync(join(root, "shared/privacy-ui.js"), "utf8");
-for (const signal of ["maiw.privacyConsent", "acceptedAt", "privacy/index.html", "No operator data server"]) check(privacySource.includes(signal), `首次隐私告知缺少实现信号：${signal}`);
+for (const signal of ["maiw.privacyConsent", "acceptedAt", "privacy/index.html", "No prompt-data server", "Optional sponsored AI tools"]) check(privacySource.includes(signal), `首次隐私告知缺少实现信号：${signal}`);
 const workspaceInitialize = workspaceSource.slice(workspaceSource.indexOf("async function initialize()"));
 const sidepanelInitialize = sidepanelSource.slice(sidepanelSource.indexOf("async function initialize()"));
 check(workspaceInitialize.indexOf("ensureConsent") < workspaceInitialize.indexOf("renderFrames(); renderHistory()"), "全屏工作台必须在加载第三方平台前完成隐私告知");
 check(sidepanelInitialize.indexOf("ensureConsent") < sidepanelInitialize.indexOf("renderFrames(); renderManager()"), "侧栏必须在加载第三方平台前完成隐私告知");
 
-const dnrRules = JSON.parse(readFileSync(join(root, "rules/embed-headers.json"), "utf8"));
-check(dnrRules.every((rule) => rule.condition?.resourceTypes?.includes("sub_frame")), "嵌入响应头规则必须限定到 sub_frame");
-check(dnrRules.every((rule) => Array.isArray(rule.condition?.requestDomains) && rule.condition.requestDomains.length), "嵌入响应头规则必须限定平台域名");
+const dnrResources = manifest.declarative_net_request?.rule_resources || [];
+check(dnrResources.length === 14, "嵌入响应头规则必须按平台拆分为 13 个 AI 规则集和 1 个搜索规则集");
+const dnrDomains = new Set();
+for (const resource of dnrResources) {
+  const dnrRules = JSON.parse(readFileSync(join(root, resource.path), "utf8"));
+  check(dnrRules.length > 0, `空的 DNR 规则集：${resource.id}`);
+  check(dnrRules.every((rule) => rule.condition?.resourceTypes?.length === 1 && rule.condition.resourceTypes[0] === "sub_frame"), `${resource.id} 必须仅处理 sub_frame`);
+  check(dnrRules.every((rule) => Array.isArray(rule.condition?.requestDomains) && rule.condition.requestDomains.length), `${resource.id} 必须限定平台域名`);
+  for (const rule of dnrRules) for (const domain of rule.condition.requestDomains) dnrDomains.add(domain);
+}
+for (const domain of ["deepseek.com", "doubao.com", "yuanbao.tencent.com", "gemini.google.com", "chatgpt.com"]) check(dnrDomains.has(domain), `DNR 缺少核心平台域名：${domain}`);
 
-for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "workspace/app.js", "sidepanel/app.js"]) {
+for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "workspace/app.js", "sidepanel/app.js"]) {
   try { execFileSync(process.execPath, ["--check", join(root, file)], { stdio: "pipe" }); }
   catch (error) { failures.push(`${file} 语法检查失败：${error.stderr?.toString() || error.message}`); }
 }

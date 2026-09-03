@@ -9,13 +9,15 @@
   const style = document.createElement("style");
   style.textContent = `
     :host{all:initial}
-    button{--pet-width:284px;--pet-height:160px;position:fixed;z-index:2147483646;width:var(--pet-width);height:var(--pet-height);padding:0;border:0;border-radius:24px;display:grid;place-items:center;background:transparent;color:#172033;font:600 12px/1.3 system-ui,"Microsoft YaHei",sans-serif;filter:drop-shadow(0 10px 14px rgba(15,23,42,.28));cursor:grab;user-select:none;touch-action:none;transition:filter .18s ease,transform .18s ease}
-    .pet-media{grid-area:1/1;width:var(--pet-width);height:var(--pet-height);display:block;object-fit:contain;pointer-events:none;-webkit-user-drag:none;transition:transform .18s ease}.pet-fallback{opacity:0}.fallback .pet-video,.image-mode .pet-video{display:none}.fallback .pet-fallback,.image-mode .pet-fallback{opacity:1}.tip{position:absolute;right:calc(var(--pet-width) - 10px);top:50%;width:max-content;max-width:190px;padding:8px 10px;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:rgba(15,23,42,.9);color:#fff;box-shadow:0 8px 24px rgba(15,23,42,.2);opacity:0;transform:translate(6px,-50%);pointer-events:none;transition:.18s ease}.tip strong,.tip span{display:block}.tip span{margin-top:2px;color:#cbd5e1;font-size:11px}
-    button:hover{transform:scale(1.06);filter:drop-shadow(0 13px 18px rgba(79,70,229,.34))}button:hover .pet-media{transform:translateY(-2px)}button:hover .tip,button:focus-visible .tip{opacity:1;transform:translate(0,-50%)}
-    button:active{cursor:grabbing;transform:scale(.98)}
-    button:focus-visible{outline:3px solid rgba(79,70,229,.38);outline-offset:3px}
+    .pet-launcher{--pet-width:284px;--pet-height:160px;--hit-left:82px;--hit-top:5px;--hit-width:120px;--hit-height:150px;position:fixed;z-index:2147483646;width:var(--pet-width);height:var(--pet-height);display:grid;place-items:center;pointer-events:none;color:#172033;font:600 12px/1.3 system-ui,"Microsoft YaHei",sans-serif;user-select:none}
+    .pet-hit{position:absolute;z-index:2;left:var(--hit-left);top:var(--hit-top);width:var(--hit-width);height:var(--hit-height);padding:0;border:0;border-radius:42%;background:transparent;cursor:grab;pointer-events:auto;touch-action:none}
+    .pet-media{grid-area:1/1;width:var(--pet-width);height:var(--pet-height);display:block;object-fit:contain;pointer-events:none;-webkit-user-drag:none;filter:drop-shadow(0 10px 14px rgba(15,23,42,.28));transition:filter .18s ease,transform .18s ease}.pet-fallback{opacity:0}.fallback .pet-video,.image-mode .pet-video{display:none}.fallback .pet-fallback,.image-mode .pet-fallback{opacity:1}.tip{position:absolute;right:calc(var(--pet-width) - 10px);top:50%;width:max-content;max-width:190px;padding:8px 10px;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:rgba(15,23,42,.9);color:#fff;box-shadow:0 8px 24px rgba(15,23,42,.2);opacity:0;transform:translate(6px,-50%);pointer-events:none;transition:.18s ease}.tip strong,.tip span{display:block}.tip span{margin-top:2px;color:#cbd5e1;font-size:11px}
+    .pet-hit:hover~.pet-media{transform:translateY(-2px) scale(1.06);filter:drop-shadow(0 13px 18px rgba(79,70,229,.34))}.pet-hit:hover~.tip,.pet-hit:focus-visible~.tip{opacity:1;transform:translate(0,-50%)}
+    .pet-hit:active{cursor:grabbing}.pet-hit:active~.pet-media{transform:scale(.98)}
+    .pet-hit:focus-visible{outline:3px solid rgba(79,70,229,.38);outline-offset:3px}
     @media(max-width:640px){.tip{display:none}}
   `;
+  const stage = document.createElement("div"); stage.className = "pet-launcher";
   const button = document.createElement("button");
   const animationUrls = {
     idle: chrome.runtime.getURL("assets/pet/pet-idle.webm"),
@@ -25,10 +27,10 @@
   const clickAnimations = ["pet-click.webm", "pet-click-happy.webm", "pet-click-shy.webm", "pet-click-laugh.webm", "pet-click-angry.webm"].map((name) => chrome.runtime.getURL(`assets/pet/${name}`));
   const ambientAnimations = ["pet-random-look.webm", "pet-random-yawn.webm", "pet-random-stretch.webm", "pet-random-cube.webm", "pet-random-code.webm", "pet-random-snack.webm", "pet-random-hum.webm", "pet-random-dance.webm", "pet-random-think.webm"].map((name) => chrome.runtime.getURL(`assets/pet/${name}`));
   const fallbackUrl = chrome.runtime.getURL("assets/launcher-pet.png");
-  button.type = "button"; button.innerHTML = `<video class="pet-media pet-video" autoplay loop muted playsinline preload="auto" aria-hidden="true"></video><img class="pet-media pet-fallback" src="${fallbackUrl}" alt=""><span class="tip"><strong>单击打开侧栏</strong><span>双击打开全屏 · 拖动移动位置</span></span>`; button.title = "单击打开侧栏，双击打开全屏"; button.setAttribute("aria-label", "多AI提问助手桌宠：单击打开侧栏，双击打开全屏，拖动可调整位置");
-  shadow.append(style, button); document.documentElement.append(host);
+  button.type = "button"; button.className = "pet-hit"; button.title = "单击打开侧栏，双击打开全屏"; button.setAttribute("aria-label", "多AI提问助手桌宠：单击打开侧栏，双击打开全屏，拖动可调整位置");
+  stage.innerHTML = `<video class="pet-media pet-video" autoplay loop muted playsinline preload="auto" aria-hidden="true"></video><img class="pet-media pet-fallback" src="${fallbackUrl}" alt=""><span class="tip"><strong>单击打开侧栏</strong><span>双击打开全屏 · 拖动移动位置</span></span>`; stage.prepend(button); shadow.append(style, stage); document.documentElement.append(host);
 
-  const video = button.querySelector(".pet-video");
+  const video = stage.querySelector(".pet-video");
   let dragging = null;
   let moved = false;
   let position = null;
@@ -49,6 +51,9 @@
     if (desiredWidth <= maxWidth) return { width: desiredWidth, height: launcherSize };
     return { width: maxWidth, height: Math.round(maxWidth * 9 / 16) };
   };
+  const hitDimensions = (size) => launcherStyle === "image"
+    ? { left: Math.round(size.width * .14), top: Math.round(size.height * .06), width: Math.round(size.width * .72), height: Math.round(size.height * .9) }
+    : { left: Math.round(size.width * .29), top: Math.round(size.height * .03), width: Math.round(size.width * .42), height: Math.round(size.height * .94) };
 
   function clamp(next) {
     const launcher = dimensions();
@@ -58,7 +63,7 @@
   function applyPosition(next) {
     const launcher = dimensions();
     position = clamp(next || { x: innerWidth - launcher.width - margin, y: Math.max(80, (innerHeight - launcher.height) / 2) });
-    button.style.left = `${position.x}px`; button.style.top = `${position.y}px`;
+    stage.style.left = `${position.x}px`; stage.style.top = `${position.y}px`; host.dataset.positionX = String(position.x); host.dataset.positionY = String(position.y);
   }
 
   function applyAppearance(settings = {}) {
@@ -67,15 +72,17 @@
     launcherAnimationPack = settings.launcherAnimationPack === "basic" ? "basic" : "rich";
     launcherRandomFrequency = ["off", "low", "normal", "high"].includes(settings.launcherRandomFrequency) ? settings.launcherRandomFrequency : "normal";
     const launcher = dimensions();
-    button.style.setProperty("--pet-width", `${launcher.width}px`); button.style.setProperty("--pet-height", `${launcher.height}px`);
+    const hit = hitDimensions(launcher); for (const [name, value] of Object.entries(hit)) launcherElementStyle(name, value);
+    function launcherElementStyle(name, value) { stage.style.setProperty(`--hit-${name}`, `${value}px`); host.dataset[`hit${name[0].toUpperCase()}${name.slice(1)}`] = String(value); }
+    stage.style.setProperty("--pet-width", `${launcher.width}px`); stage.style.setProperty("--pet-height", `${launcher.height}px`);
     host.dataset.launcherStyle = launcherStyle; host.dataset.launcherSize = String(launcherSize); host.dataset.animationPack = launcherAnimationPack; host.dataset.randomFrequency = launcherRandomFrequency; host.dataset.renderWidth = String(launcher.width); host.dataset.renderHeight = String(launcher.height);
-    button.classList.toggle("image-mode", launcherStyle === "image"); button.classList.remove("fallback");
+    stage.classList.toggle("image-mode", launcherStyle === "image"); stage.classList.remove("fallback");
     if (launcherStyle === "image") { clearRandomAnimation(); video.pause(); } else if (!host.hidden && !document.hidden) { animationState = ""; playAnimation("idle"); scheduleRandomAnimation(); }
     applyPosition(position);
   }
 
   function showFallback() {
-    button.classList.add("fallback"); host.dataset.mediaReady = "false";
+    stage.classList.add("fallback"); host.dataset.mediaReady = "false";
     clearRandomAnimation(); video.pause();
   }
 
@@ -106,7 +113,7 @@
     const nextUrl = requestedUrl || animationUrls[state]; if (!nextUrl) return;
     if (animationState === state && currentAnimationUrl === nextUrl) { if (video.paused && !host.hidden && !document.hidden) video.play().catch(showFallback); return; }
     if (state !== "idle") clearRandomAnimation();
-    animationState = state; currentAnimationUrl = nextUrl; host.dataset.animationState = state; host.dataset.animationFile = nextUrl.split("/").pop() || ""; host.dataset.mediaReady = "false"; button.classList.remove("fallback"); video.loop = state === "idle" || state === "drag"; video.src = nextUrl;
+    animationState = state; currentAnimationUrl = nextUrl; host.dataset.animationState = state; host.dataset.animationFile = nextUrl.split("/").pop() || ""; host.dataset.mediaReady = "false"; stage.classList.remove("fallback"); video.loop = state === "idle" || state === "drag"; video.src = nextUrl;
     const playback = video.play(); if (playback?.catch) playback.catch(showFallback);
   }
 
@@ -136,7 +143,7 @@
 
   button.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    const rect = button.getBoundingClientRect();
+    const rect = stage.getBoundingClientRect();
     dragging = { pointerX: event.clientX, pointerY: event.clientY, x: rect.left, y: rect.top };
     moved = false; button.setPointerCapture(event.pointerId); event.preventDefault();
   });

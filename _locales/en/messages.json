@@ -1,0 +1,16 @@
+{
+  "extensionName": { "message": "Multi AI Workbench - Layout Lab" },
+  "extensionShortName": { "message": "AI Layout" },
+  "extensionDescription": { "message": "Ask several AI websites at once and compare answers in a full-page workbench or side panel, with local prompts and history." },
+  "actionTitle": { "message": "Open Multi AI Workbench" },
+  "commandAskSelection": { "message": "Process selected webpage text with chosen AI services" },
+  "commandOpenPicker": { "message": "Open the action picker for selected webpage text" },
+  "commandActionSlot1": { "message": "Run quick action 1" },
+  "commandActionSlot2": { "message": "Run quick action 2" },
+  "commandActionSlot3": { "message": "Run quick action 3" },
+  "commandActionSlot4": { "message": "Run quick action 4" },
+  "commandActionSlot5": { "message": "Run quick action 5" },
+  "commandActionSlot6": { "message": "Run quick action 6" },
+  "commandActionSlot7": { "message": "Run quick action 7" },
+  "commandActionSlot8": { "message": "Run quick action 8" }
+}

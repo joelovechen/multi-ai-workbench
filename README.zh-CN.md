@@ -38,7 +38,7 @@ npm run package
 
 ## 隐私
 
-扩展不提供产品账号、遥测、API 密钥托管、广告 SDK 或开发者中转服务。问题、选中文字和附件仅在用户主动操作后直接发送给用户选择的平台。详细说明参见 [PRIVACY.md](PRIVACY.md)。
+扩展不提供产品账号、遥测、API 密钥托管、广告 SDK 或开发者中转服务。问题、选中文字和附件仅在用户主动操作后直接发送给用户选择的平台。顶部包含可关闭的“AI 工具精选”入口，其中部分链接为明确标注的推广链接；目录从 GitHub Pages 和 Cloudflare Pages 动态读取，扩展不自行记录点击。详细说明参见 [PRIVACY.md](PRIVACY.md)。
 
 ## 开发者与支持
 
@@ -49,4 +49,3 @@ npm run package
 ## 开源协议
 
 源码采用 [MIT License](LICENSE)。再分发素材的版权与许可说明参见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-

@@ -377,6 +377,61 @@
     return { ok: true, theme };
   }
 
+  let compactObserver = null, compactTimer = 0, compactResizeBound = false;
+  const compactStyleText = `
+    html[data-multi-ai-sidepanel-layout="adaptive"],
+    html[data-multi-ai-sidepanel-layout="adaptive"] body {
+      width:100%!important;max-width:100vw!important;min-width:0!important;margin-left:0!important;margin-right:0!important;overflow-x:hidden!important;box-sizing:border-box!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] :where(#root,#app,#__next,[data-reactroot],main,[role="main"],[data-multi-ai-compact-wide]) {
+      min-width:0!important;max-width:100vw!important;box-sizing:border-box!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] [data-multi-ai-compact-wide] {
+      width:100%!important;margin-left:0!important;margin-right:0!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] [data-multi-ai-compact-sidebar] {
+      display:none!important;width:0!important;min-width:0!important;max-width:0!important;flex:0 0 0!important;overflow:hidden!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] :where(article,[class*="message" i],[class*="answer" i],[class*="markdown" i],[class*="conversation" i]) {
+      min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important;box-sizing:border-box!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] :where(form,[class*="composer" i],[class*="input-container" i],[class*="chat-input" i],[class*="prompt" i]) {
+      min-width:0!important;max-width:calc(100vw - 12px)!important;box-sizing:border-box!important
+    }
+    html[data-multi-ai-sidepanel-layout="adaptive"] :where(img,video,canvas,svg:not([width])) {max-width:100%!important}
+    html[data-multi-ai-sidepanel-layout="adaptive"] :where(pre,[class*="code" i],[class*="table" i]) {max-width:100%!important;overflow-x:auto!important}
+    html[data-multi-ai-sidepanel-layout="adaptive"] table {width:max-content!important;max-width:none!important}
+  `;
+  function clearCompactLayout() {
+    compactObserver?.disconnect(); compactObserver = null; clearTimeout(compactTimer);
+    document.documentElement.removeAttribute("data-multi-ai-sidepanel-layout"); document.documentElement.removeAttribute("data-multi-ai-sidepanel-service");
+    document.getElementById("multi-ai-sidepanel-compact-style")?.remove();
+    for (const element of document.querySelectorAll("[data-multi-ai-compact-wide],[data-multi-ai-compact-sidebar]")) { element.removeAttribute("data-multi-ai-compact-wide"); element.removeAttribute("data-multi-ai-compact-sidebar"); }
+  }
+  function fitCompactLayout() {
+    if (document.documentElement.dataset.multiAiSidepanelLayout !== "adaptive" || !document.body) return;
+    const viewport = Math.max(240, innerWidth), rootCandidates = [document.body, ...document.querySelectorAll("body>*,#root,#app,#__next,[data-reactroot],main,[role='main'],[class*='layout' i],[class*='container' i],[class*='content' i]")];
+    for (const element of rootCandidates.slice(0, 160)) {
+      const rect = element.getBoundingClientRect(), minWidth = Number.parseFloat(getComputedStyle(element).minWidth) || 0;
+      if (rect.width > viewport + 8 || minWidth > viewport) element.dataset.multiAiCompactWide = "true";
+    }
+    const sidebarCandidates = document.querySelectorAll("aside,[data-testid*='sidebar' i],[class*='sidebar' i],[class*='side-bar' i],[class*='sider' i],[class*='left-panel' i],[class*='leftPanel']");
+    for (const element of [...sidebarCandidates].slice(0, 80)) {
+      if (!(element instanceof HTMLElement) || element.closest("[role='dialog']") || element.querySelector("textarea,input[type='text'],[contenteditable='true']")) continue;
+      const rect = element.getBoundingClientRect(), style = getComputedStyle(element), edgeAligned = Math.abs(rect.left) <= 16 || Math.abs(viewport - rect.right) <= 16, tall = rect.height >= innerHeight * .42, sidebarWidth = rect.width >= 48 && rect.width <= Math.min(340, viewport * .82), positioned = ["fixed", "sticky", "absolute"].includes(style.position) || ["flex", "grid"].includes(getComputedStyle(element.parentElement || document.body).display);
+      if (edgeAligned && tall && sidebarWidth && positioned) element.dataset.multiAiCompactSidebar = "true";
+    }
+  }
+  function scheduleCompactFit() { clearTimeout(compactTimer); compactTimer = setTimeout(fitCompactLayout, 120); }
+  function applyEmbedLayout(mode) {
+    const normalized = mode === "original" ? "original" : "adaptive"; clearCompactLayout();
+    if (normalized === "original") return { ok: true, mode: normalized };
+    const style = document.createElement("style"); style.id = "multi-ai-sidepanel-compact-style"; style.textContent = compactStyleText; (document.head || document.documentElement).append(style);
+    document.documentElement.dataset.multiAiSidepanelLayout = "adaptive"; document.documentElement.dataset.multiAiSidepanelService = service.key; compactObserver = new MutationObserver(scheduleCompactFit); compactObserver.observe(document.documentElement, { childList: true, subtree: true });
+    if (!compactResizeBound) { addEventListener("resize", scheduleCompactFit, { passive: true }); compactResizeBound = true; }
+    fitCompactLayout(); return { ok: true, mode: normalized, viewport: innerWidth, service: service.key };
+  }
+
   async function restoreHighlights() {
     const stored = await chrome.storage.local.get("maiw.highlights");
     const rows = (stored["maiw.highlights"] || []).filter((row) => row.service === service.key && row.url === location.href);
@@ -411,6 +466,7 @@
     if (message.action === "NEW_CHAT") return startNewChat();
     if (message.action === "LOCATE_QUESTION") return locateQuestion(message.question);
     if (message.action === "SET_APPEARANCE") return applyAppearance(message.theme === "dark" ? "dark" : "light");
+    if (message.action === "SET_EMBED_LAYOUT") return applyEmbedLayout(message.mode);
     return { ok: false, reason: "unknown_sidepanel_action" };
   }
   const extensionOrigin = new URL(chrome.runtime.getURL("/")).origin;

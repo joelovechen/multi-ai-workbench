@@ -14,9 +14,25 @@ const registry = sandbox.self.MultiAIServiceRegistry;
 const promptTemplates = sandbox.self.MultiAIPromptTemplates;
 vm.runInNewContext(readFileSync(join(root, "shared/export-core.js"), "utf8"), sandbox);
 const exportCore = sandbox.self.MultiAIExportCore;
+const affiliateSandbox = { chrome: { runtime: { getManifest: () => ({ version: "0.5.0" }) } }, URL, self: {} };
+vm.runInNewContext(readFileSync(join(root, "shared/affiliate-catalog.js"), "utf8"), affiliateSandbox);
+const affiliateCatalog = affiliateSandbox.MultiAIAffiliateCatalog;
 
 test("默认平台为 DeepSeek、豆包和腾讯元宝，侧栏首选 DeepSeek", () => {
   assert.deepEqual([...registry.defaults], ["deepseek", "doubao", "yuanbao"]);
+});
+
+test("推广目录强制双语、安全链接、状态过滤和动态排序", () => {
+  const catalog = JSON.parse(readFileSync(join(root, "docs/affiliate-catalog/catalog.json"), "utf8"));
+  assert.equal(affiliateCatalog.validateCatalog(catalog), true);
+  assert.equal(affiliateCatalog.visibleTools(catalog, "all", "", "zh").length, 0);
+  const active = structuredClone(catalog);
+  active.tools[0].status = "active"; active.tools[0].visible = true; active.tools[0].affiliate.defaultUrl = "https://example.test/register?ref=abc";
+  active.tools[1].status = "active"; active.tools[1].visible = true; active.tools[1].affiliate.defaultUrl = "https://example.test/register?ref=def"; active.tools[1].sort = 1;
+  assert.equal(affiliateCatalog.visibleTools(active, "coding", "代码", "zh")[0].id, "coderabbit");
+  assert.equal(affiliateCatalog.visibleTools(active, "coding", "frontend", "en")[0].id, "kombai");
+  active.tools[0].affiliate.defaultUrl = "javascript:alert(1)";
+  assert.equal(affiliateCatalog.visibleTools(active, "all", "", "zh").some((row) => row.id === "coderabbit"), false);
 });
 
 test("13 个 AI 均具备完整可靠性适配合同", () => {
@@ -253,7 +269,7 @@ test("新版工作台包含双行网格、拖动提问卡、平台抽屉和网�
   assert.match(launcher, /now - lastClickAt > 360/);
   assert.match(launcher, /assets\/launcher-pet\.png/);
   for (const asset of ["pet-idle.webm", "pet-click.webm", "pet-drag.webm"]) assert.match(launcher, new RegExp(asset.replace(".", "\\.")));
-  for (const signal of ["clickAnimations", "ambientAnimations", "scheduleRandomAnimation", "nextRandomDelay", "animationPack", "randomFrequency"]) assert.match(launcher, new RegExp(signal));
+  for (const signal of ["clickAnimations", "ambientAnimations", "scheduleRandomAnimation", "nextRandomDelay", "animationPack", "randomFrequency", "pet-launcher", "pet-hit", "hitDimensions", "--hit-left", "--hit-width"]) assert.match(launcher, new RegExp(signal));
   assert.equal(manifest.icons["128"], "assets/launcher-pet.png"); assert.equal(manifest.action.default_icon["16"], "assets/launcher-pet.png");
   assert.match(launcher, /image-mode/); assert.match(launcher, /launcherSize = 160/); assert.match(launcher, /Math\.min\(240, Math\.max\(96/);
   for (const signal of ["playAnimation(\"idle\")", "playAnimation(\"click\",", "playAnimation(\"drag\")", "playAnimation(\"ambient\",", "showFallback"]) assert.match(launcher, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -271,14 +287,16 @@ test("原生侧栏支持单 AI 可见、多个 AI 发送和受控跨框架消息
 
   assert.ok(manifest.permissions.includes("sidePanel"));
   assert.equal(manifest.side_panel.default_path, "sidepanel/index.html");
-  for (const id of ["tabList", "frameStack", "targetMenu", "send", "managePlatforms", "minimizePanel"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["tabList", "frameStack", "targetMenu", "send", "managePlatforms", "minimizePanel", "previousModel", "nextModel", "embedLayoutMode"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.doesNotMatch(html, /class="panel-head"/);
-  assert.match(html, /<nav class="ai-tabs"[^>]*><button id="minimizePanel"[\s\S]*?<button id="openWorkspace"[\s\S]*?<div id="tabList"[\s\S]*?<button id="managePlatforms"/);
+  assert.match(html, /<nav class="ai-tabs"[^>]*>[\s\S]*?<button id="minimizePanel"[\s\S]*?<div class="tab-rail"><div id="tabList" role="tablist"[\s\S]*?<button id="managePlatforms"[\s\S]*?<button id="openWorkspace"/);
+  assert.match(html, /class="top-action fullscreen-tab"[\s\S]*?<svg/);
   assert.match(css, /\.ai-frame\{[^}]*opacity:0/);
   assert.match(css, /\.ai-frame\.active\{[^}]*opacity:1/);
   assert.match(css, /\.composer\{[^}]*left:8px;right:8px;bottom:8px/);
   assert.match(css, /\.internal-controls\{display:none!important\}/);
-  for (const signal of ["frameCommand", "Promise.all(targets.map", "readyOrigins", "multi-ai-sidepanel-ready", "getLayout", "maiw-sidepanel", "MINIMIZE_UI"]) assert.match(app, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const signal of ["frameCommand", "Promise.all(targets.map", "readyOrigins", "multi-ai-sidepanel-ready", "getLayout", "maiw-sidepanel", "MINIMIZE_UI", "ai-tab-icon", "aria-selected", "ArrowLeft", "carouselOffset", "--carousel-x", "rotateModel", "lastCarouselWheelAt", "SET_EMBED_LAYOUT", "embedLayoutMode", "sidepanelServices", "sidepanelMaxFrames", "sidepanelCatalogVersion", "ensureFrameLoaded"]) assert.match(app, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const signal of ["applyEmbedLayout", "data-multi-ai-sidepanel-layout", "data-multi-ai-sidepanel-service", "data-multi-ai-compact-wide", "data-multi-ai-compact-sidebar", "MutationObserver", "SET_EMBED_LAYOUT"]) assert.match(bridge, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(bridge, /event\.origin !== extensionOrigin/);
   assert.match(bridge, /unknown_sidepanel_action/);
   assert.match(launcher, /--pet-width:284px;--pet-height:160px/);
