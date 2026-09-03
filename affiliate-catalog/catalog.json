@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": 1,
+  "generatedAt": "2026-09-03T07:00:00Z",
+  "expiresAt": "2026-10-03T07:00:00Z",
+  "minExtensionVersion": "0.5.0",
+  "enabled": true,
+  "supportedLocales": ["zh-CN", "en"],
+  "categories": [
+    { "id": "coding", "visible": true, "sort": 10, "icon": "icons/categories/coding.svg", "i18n": { "zh-CN": { "name": "编程开发" }, "en": { "name": "Coding" } } },
+    { "id": "automation", "visible": true, "sort": 20, "icon": "icons/categories/automation.svg", "i18n": { "zh-CN": { "name": "Agent 与自动化" }, "en": { "name": "Agents & Automation" } } },
+    { "id": "creative", "visible": true, "sort": 30, "icon": "icons/categories/creative.svg", "i18n": { "zh-CN": { "name": "图片、视频与语音" }, "en": { "name": "Image, Video & Audio" } } },
+    { "id": "office", "visible": true, "sort": 40, "icon": "icons/categories/office.svg", "i18n": { "zh-CN": { "name": "写作与办公" }, "en": { "name": "Writing & Productivity" } } }
+  ],
+  "tools": [
+    { "id": "coderabbit", "status": "draft", "visible": false, "featured": true, "sort": 10, "categoryIds": ["coding"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "CodeRabbit", "description": "AI 代码审查工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "CodeRabbit", "description": "AI-powered code reviews", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "kombai", "status": "draft", "visible": false, "featured": true, "sort": 20, "categoryIds": ["coding"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Kombai", "description": "AI 前端开发工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Kombai", "description": "AI frontend development tool", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "lovable", "status": "draft", "visible": false, "featured": true, "sort": 30, "categoryIds": ["coding"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Lovable", "description": "AI 应用构建工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Lovable", "description": "AI application builder", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "taskade", "status": "draft", "visible": false, "featured": true, "sort": 40, "categoryIds": ["automation"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Taskade", "description": "AI Agent 与工作流工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Taskade", "description": "AI agents and workflows", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "browse-ai", "status": "draft", "visible": false, "featured": false, "sort": 50, "categoryIds": ["automation"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Browse AI", "description": "网页自动化工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Browse AI", "description": "Web automation tool", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "elevenlabs", "status": "draft", "visible": false, "featured": true, "sort": 60, "categoryIds": ["creative"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "ElevenLabs", "description": "AI 语音与 Agent 工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "ElevenLabs", "description": "AI voice and agent tools", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "fliki", "status": "draft", "visible": false, "featured": false, "sort": 70, "categoryIds": ["creative"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Fliki", "description": "AI 视频与语音生成工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Fliki", "description": "AI video and voice generation", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } },
+    { "id": "gamma", "status": "draft", "visible": false, "featured": true, "sort": 80, "categoryIds": ["office"], "icon": "icons/tools/ai-tool.svg", "i18n": { "zh-CN": { "name": "Gamma", "description": "AI 演示文稿、文档与网页工具", "buttonText": "注册使用", "inviteCodeLabel": "邀请码" }, "en": { "name": "Gamma", "description": "AI presentations, documents and webpages", "buttonText": "Try it", "inviteCodeLabel": "Invite code" } }, "affiliate": { "defaultUrl": "", "localizedUrls": {}, "inviteCode": "", "showInviteCode": false } }
+  ]
+}
