@@ -1,6 +1,6 @@
 {
-  "extensionName": { "message": "Multi AI Workbench - Layout Lab" },
-  "extensionShortName": { "message": "AI Layout" },
+  "extensionName": { "message": "Multi AI Workbench" },
+  "extensionShortName": { "message": "Multi AI" },
   "extensionDescription": { "message": "Ask several AI websites at once and compare answers in a full-page workbench or side panel, with local prompts and history." },
   "actionTitle": { "message": "Open Multi AI Workbench" },
   "commandAskSelection": { "message": "Process selected webpage text with chosen AI services" },

@@ -4,13 +4,13 @@
   const $ = (selector) => document.querySelector(selector);
   const sidepanelServices = [...registry.defaults, ...registry.ai.map((service) => service.key).filter((key) => !registry.defaults.includes(key))];
   const sidepanelMaxFrames = registry.ai.length, sidepanelCatalogVersion = 2;
-  const state = { services: [], targets: new Set(), active: "", locale: "zh", answerMode: "expert", embedLayoutMode: "adaptive", files: [], ready: new Set(), statuses: new Map(), operations: [], groups: [], activeActionId: "", recentActionIds: [], actionContext: {}, failedServices: new Set(), lastPayload: null, lastSent: null };
+  const state = { services: [], targets: new Set(), active: "", locale: "", answerMode: "expert", embedLayoutMode: "adaptive", files: [], ready: new Set(), statuses: new Map(), operations: [], groups: [], activeActionId: "", recentActionIds: [], actionContext: {}, failedServices: new Set(), lastPayload: null, lastSent: null };
   const pending = new Map(), readyOrigins = new Map(); let draftTimer = 0, initialized = false, deferredTask = null, lastCarouselWheelAt = 0, affiliateController = null;
 
-  function setStatus(message, error = false) { const node = $("#status"); node.textContent = message; node.classList.toggle("error", error); }
+  function setStatus(message, error = false) { const node = $("#status"); node.textContent = globalThis.MultiAIUiI18n?.translate(message, state.locale) || message; node.classList.toggle("error", error); }
   async function persist() { await chrome.storage.local.set({ "maiw.sidepanel": { services: state.services, targets: [...state.targets], active: state.active, answerMode: state.answerMode, embedLayoutMode: state.embedLayoutMode, recentActionIds: state.recentActionIds, catalogVersion: sidepanelCatalogVersion }, "maiw.sidepanelDraft": { text: $("#question").value, actionId: state.activeActionId } }); }
   function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => void persist(), 250); }
-  function statusLabel(status) { return { pending: "正在发送", ok: "已确认", error: "发送失败", login: "需要登录", unread: "已完成" }[status] || ""; }
+  function statusLabel(status) { const value = { pending: "正在发送", ok: "已确认", error: "发送失败", login: "需要登录", unread: "已完成" }[status] || ""; return globalThis.MultiAIUiI18n?.translate(value, state.locale) || value; }
 
   function activateTab(key) {
     if (!state.services.includes(key)) return;
@@ -82,7 +82,7 @@
   function updateFrameInset() { const height = Math.ceil(document.querySelector(".composer")?.getBoundingClientRect().height || 138), bottom = height + 16; $("#frameStack").style.bottom = `${bottom}px`; $("#templatePicker").style.bottom = `${bottom}px`; $("#targetMenu").style.bottom = `${bottom}px`; }
   function renderActiveTemplate() { const operation = activeTemplate(); $("#activeTemplate").hidden = !operation; $("#activeTemplateLabel").textContent = operation ? `${operation.icon} ${operation.name}` : ""; $("#templateToggle").textContent = operation ? "✨ 更换操作" : "✨ 选择操作"; updateFrameInset(); }
   function applyTemplate(id, context = null) { state.activeActionId = promptTemplates.find(id, state.operations)?.enabled ? id : ""; if (context) state.actionContext = context; if (state.activeActionId) state.recentActionIds = [state.activeActionId, ...state.recentActionIds.filter((item) => item !== state.activeActionId)].slice(0, 5); renderActiveTemplate(); scheduleDraftSave(); }
-  function composedQuestion() { return promptTemplates.build(activeTemplate(), { content: $("#question").value, ...state.actionContext }); }
+  function composedQuestion() { return promptTemplates.build(promptTemplates.localizeOperation(activeTemplate(), state.locale), { content: $("#question").value, ...state.actionContext }); }
 
   async function activateOperation(operation, context = null, execute = false) {
     if (!operation) return;
@@ -152,12 +152,13 @@
 
   async function initialize() {
     const stored = await chrome.storage.local.get(["maiw.sidepanel", "maiw.sidepanelDraft", "maiw.settings", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups"]), saved = stored["maiw.sidepanel"] || {}, draft = stored["maiw.sidepanelDraft"] || {}, main = stored["maiw.settings"] || {};
-    const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: main.locale }); state.locale = consent.locale;
+    const savedLocale = ["zh", "en"].includes(main.locale) ? main.locale : "";
+    const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: savedLocale || undefined }); state.locale = consent.locale;
     const configuration = promptTemplates.resolveConfiguration(stored["maiw.operations"], stored["maiw.operationGroups"], stored["maiw.promptTemplates"], main.promptMenuTemplateIds); state.operations = configuration.operations; state.groups = configuration.groups; if (configuration.migrated) await chrome.storage.local.set({ "maiw.operations": state.operations, "maiw.operationGroups": state.groups });
     const catalogMigrated = Number(saved.catalogVersion || 0) < sidepanelCatalogVersion;
     const candidates = (catalogMigrated ? sidepanelServices : Array.isArray(saved.services) ? saved.services : sidepanelServices).filter((key) => registry.byKey[key]?.kind === "ai").slice(0, sidepanelMaxFrames); state.services = candidates.length ? candidates : [...sidepanelServices]; state.active = state.services.includes(saved.active) ? saved.active : "deepseek";
     const targets = Array.isArray(saved.targets) ? saved.targets.filter((key) => state.services.includes(key)) : registry.defaults; state.targets = new Set(targets.length ? targets : registry.defaults); state.answerMode = saved.answerMode === "fast" ? "fast" : "expert"; state.embedLayoutMode = saved.embedLayoutMode === "original" ? "original" : "adaptive"; state.recentActionIds = (Array.isArray(saved.recentActionIds) ? saved.recentActionIds : saved.recentTemplateIds || []).slice(0, 5);
-    $("#answerMode").value = state.answerMode; $("#embedLayoutMode").value = state.embedLayoutMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale, compact: true }); if (catalogMigrated) await persist();
+    $("#answerMode").value = state.answerMode; $("#embedLayoutMode").value = state.embedLayoutMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale, compact: true }); globalThis.MultiAIUiI18n?.applyDocument(state.locale); if (catalogMigrated) await persist();
     if (chrome.sidePanel?.getLayout) { try { const layout = await chrome.sidePanel.getLayout(); if (layout.side === "left") { const notice = $("#sideNotice"); notice.textContent = "浏览器当前把原生侧栏放在左侧；请在浏览器外观设置中切换到右侧。"; notice.hidden = false; } } catch { /* 旧版浏览器不支持读取方向 */ } }
     initialized = true; const pendingTask = deferredTask || (await chrome.storage.session.get("maiw.pendingTask"))["maiw.pendingTask"]; deferredTask = null; if (pendingTask) await consumePendingTask(pendingTask);
   }

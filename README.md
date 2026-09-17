@@ -12,11 +12,13 @@ A free, open-source, local-first Chrome and Microsoft Edge extension for asking 
 - Provides a draggable prompt composer and a native browser side panel that displays one AI at a time while still supporting parallel queries.
 - Switches cleanly between full-page and side-panel modes.
 - Offers a draggable animated or static desktop-pet launcher on supported pages.
+- Lets you configure the pet's single-, double-, and triple-click actions; triple-click opens the conversation export center by default.
+- Exports visible conversations from supported AI webpages through a searchable, selectable preview as Markdown, TXT, JSON, Word-compatible DOC, long PNG, or print/PDF.
 - Sends selected webpage text through context-menu actions or keyboard shortcuts.
 - Includes three built-in prompt actions: bidirectional Chinese/English translation, summarization, and plain-language explanation.
 - Supports custom prompt actions, groups, ordering, target services, answer modes, shortcuts, and send previews.
 - Stores settings, sessions, prompt templates, drafts, highlights, and notes locally.
-- Exports collected content as Markdown, PNG, or PDF.
+- Exports manually collected content as Markdown, PNG, or PDF.
 
 ## Install from source
 

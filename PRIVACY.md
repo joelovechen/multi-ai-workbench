@@ -1,6 +1,6 @@
 # 隐私政策 / Privacy Policy
 
-生效日期：2026 年 9 月 3 日 / Effective date: September 3, 2026
+生效日期：2026 年 9 月 16 日 / Effective date: September 16, 2026
 
 多AI问答助手不设产品账号，不收集遥测，不托管 API 密钥，不运行问题中转服务器。数据主要保存在用户的浏览器中。只有用户主动发送时，问题、选中文字和附件才会直接交给所选第三方平台。扩展包含可关闭的“AI 工具精选”入口，其中部分链接为推广链接。
 
@@ -9,6 +9,7 @@ Multi AI Workbench has no product account, telemetry, API-key hosting, or operat
 ## 处理的数据
 
 - 本地设置、历史、提示词操作、侧栏草稿、划线笔记、相关页面地址以及首次告知确认记录保存在当前浏览器。
+- 只有在用户主动选择对话导出方式后，扩展才读取受支持 AI 网页中当前已加载的对话内容。内容通过 `chrome.storage.session` 临时传给扩展预览页，不会发送给开发者服务器；关闭浏览器会话后由浏览器清理。
 - 用户主动发送、执行右键菜单或快捷键操作时，相关问题、选中文字和附件会直接提交给所选第三方平台。
 - 扩展不主动读取 Cookie、密码或登录凭据，不包含广告 SDK、用户画像、遥测或第三方分析 SDK。
 - 扩展从 `multi-ai-workbench-catalog.pages.dev` 和 `joelovechen.github.io` 获取公开的推荐目录与图标。请求不包含问题、回答、选中文字、附件、历史记录或扩展生成的用户标识。

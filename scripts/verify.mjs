@@ -11,11 +11,11 @@ const petAnimations = [
   "pet-random-look.webm", "pet-random-yawn.webm", "pet-random-stretch.webm", "pet-random-cube.webm", "pet-random-code.webm", "pet-random-snack.webm", "pet-random-hum.webm", "pet-random-dance.webm", "pet-random-think.webm"
 ].map((name) => `assets/pet/${name}`);
 const required = [
-  "manifest.json", "_locales/zh_CN/messages.json", "_locales/en/messages.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js",
+  "manifest.json", "_locales/zh_CN/messages.json", "_locales/en/messages.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-core.js",
   "shared/platform-adapters.js", "shared/prompt-templates.js", "scripts/behavior-tests.mjs",
-  "shared/export-core.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/affiliate-catalog.css",
+  "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/affiliate-catalog.css",
   "workspace/index.html", "workspace/app.js", "workspace/styles.css",
-  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css",
+  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css", "conversation-export/preview.html", "conversation-export/preview.js", "conversation-export/preview.css",
   "README.md", "PRIVACY.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "assets/launcher-pet.png", ...petAnimations, "shared/privacy-ui.js", "privacy/index.html", "privacy/styles.css", "privacy/app.js"
 ];
 const failures = [];
@@ -38,7 +38,7 @@ for (const file of petAnimations) {
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
 check(manifest.manifest_version === 3, "manifest_version 必须为 3");
 check(manifest.name === "__MSG_extensionName__" && manifest.default_locale === "zh_CN", "Manifest 商店名称未接入默认本地化");
-check(manifest.version === "0.5.0", "Manifest 商店候选版本必须为 0.5.0");
+check(manifest.version === "0.6.0", "Manifest 开发版本必须为 0.6.0");
 for (const locale of ["zh_CN", "en"]) {
   const messages = JSON.parse(readFileSync(join(root, `_locales/${locale}/messages.json`), "utf8"));
   for (const key of ["extensionName", "extensionShortName", "extensionDescription", "actionTitle", "commandAskSelection", "commandOpenPicker", ...Array.from({ length: 8 }, (_, index) => `commandActionSlot${index + 1}`)]) {
@@ -46,6 +46,7 @@ for (const locale of ["zh_CN", "en"]) {
   }
   check(messages.extensionName.message.length <= 45, `${locale} 扩展名称超过 45 个字符`);
   check(messages.extensionShortName.message.length <= 12, `${locale} 扩展短名称超过 12 个字符`);
+  check(!/(?:实验|测试|Lab|Experiment)/i.test(`${messages.extensionName.message} ${messages.extensionShortName.message}`), `${locale} 产品名称仍包含实验或测试后缀`);
   check(messages.extensionDescription.message.length <= 132, `${locale} Manifest 描述超过 132 个字符`);
 }
 check(!manifest.permissions?.includes("identity"), "不得申请 identity 登录权限");
@@ -56,6 +57,7 @@ check(Boolean(manifest.commands?.["ask-selection"] && manifest.commands?.["open-
 for (let slot = 1; slot <= 8; slot += 1) check(Boolean(manifest.commands?.[`action-slot-${slot}`]), `快捷操作 ${slot} 未声明`);
 check(manifest.content_scripts?.some((entry) => entry.world === "MAIN" && entry.run_at === "document_start" && entry.js?.includes("content/main-world.js")), "受控输入和附件必须有 document_start MAIN world 桥接");
 check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/floating-launcher.js") && entry.all_frames !== true), "网页启动球必须只在顶层受支持页面注入");
+check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/conversation-export.js") && entry.js?.includes("shared/conversation-export-core.js")), "网页对话抓取器或统一导出模型未注入");
 check(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes("assets/launcher-pet.png") && entry.matches?.length), "桌宠图像未按受支持域名声明为可访问资源");
 check(petAnimations.every((asset) => manifest.web_accessible_resources?.some((entry) => entry.resources?.includes(asset))), "桌宠 WebM 动画资源声明不完整");
 check(Object.values(manifest.icons || {}).every((path) => path === "assets/launcher-pet.png") && manifest.action?.default_icon?.["16"] === "assets/launcher-pet.png", "扩展图标未使用图片桌宠素材");
@@ -94,6 +96,9 @@ check(registry?.ai?.every((service) => service.attachmentEvidenceSelectors?.leng
 const backgroundSource = readFileSync(join(root, "background/index.js"), "utf8");
 const bridgeSource = readFileSync(join(root, "content/bridge.js"), "utf8");
 const workspaceSource = readFileSync(join(root, "workspace/app.js"), "utf8");
+const affiliateSource = readFileSync(join(root, "shared/affiliate-catalog.js"), "utf8");
+check(!affiliateSource.includes("data-action=hide") && !affiliateSource.includes("隐藏推荐入口") && !affiliateSource.includes("Hide recommendations"), "精选弹窗不得直接提供隐藏入口");
+check(readFileSync(join(root, "workspace/index.html"), "utf8").includes("optional-content-settings") && workspaceSource.includes("affiliateEntryVisible"), "精选入口总开关必须位于设置的可选内容区域");
 for (const signal of ["answerMode", "FRAME_NAVIGATED", "attachment_incomplete", "confirmed"]) check(backgroundSource.includes(signal) || bridgeSource.includes(signal), `发送链缺少实现信号：${signal}`);
 for (const signal of ["FRAME_NAVIGATED", "frameUrls", "session.urls", "sanitizeHtml", "nodeToMarkdown", "selected === false", "LOCATE_QUESTION_ALL"]) check(workspaceSource.includes(signal), `工作台缺少实现信号：${signal}`);
 for (const signal of ["ClipboardEvent", "modeControl", "upload_unconfirmed", "questionEvidenceCount", "send_confirmation_timeout", "newChatSelectors", "multiAiPickerId", "highlightStyle", "deleteHighlight"]) check(bridgeSource.includes(signal), `页面适配缺少实现信号：${signal}`);
@@ -104,6 +109,13 @@ const sidepanelSource = readFileSync(join(root, "sidepanel/app.js"), "utf8");
 for (const signal of ["consumePendingTask", "maiw.sidepanelDraft", "failedServices", "composedQuestion"]) check(sidepanelSource.includes(signal), `侧栏易用性链缺少实现信号：${signal}`);
 const privacySource = readFileSync(join(root, "shared/privacy-ui.js"), "utf8");
 for (const signal of ["maiw.privacyConsent", "acceptedAt", "privacy/index.html", "No prompt-data server", "Optional sponsored AI tools"]) check(privacySource.includes(signal), `首次隐私告知缺少实现信号：${signal}`);
+check(privacySource.includes("chrome.i18n?.getUILanguage?.()") && privacySource.includes("navigator.languages?.find(Boolean)"), "首次使用语言必须优先跟随浏览器界面语言并提供标准回退");
+check(workspaceSource.includes("launcherEdgeGap") && workspaceSource.includes("launcherEdgeSnap"), "工作台缺少桌宠贴边距离或自动吸附设置");
+const uiI18nSource = readFileSync(join(root, "shared/ui-i18n.js"), "utf8");
+check(workspaceSource.includes("MultiAIUiI18n") && sidepanelSource.includes("MultiAIUiI18n") && backgroundSource.includes("ui-i18n.js"), "全屏、侧栏或右键菜单未接入统一界面本地化层");
+for (const signal of ["applyDocument", "MutationObserver", "Multi AI Workbench", "Featured AI Tools", "Pet edge gap", "Manage context actions"]) check(uiI18nSource.includes(signal), `界面本地化缺少覆盖项：${signal}`);
+const launcherSource = readFileSync(join(root, "content/floating-launcher.js"), "utf8");
+for (const signal of ["launcherEdgeGap", "launcherEdgeSnap", "snapToEdge", "hitDimensions", "edgeGap", "edgeSnap"]) check(launcherSource.includes(signal), `桌宠贴边实现缺少信号：${signal}`);
 const workspaceInitialize = workspaceSource.slice(workspaceSource.indexOf("async function initialize()"));
 const sidepanelInitialize = sidepanelSource.slice(sidepanelSource.indexOf("async function initialize()"));
 check(workspaceInitialize.indexOf("ensureConsent") < workspaceInitialize.indexOf("renderFrames(); renderHistory()"), "全屏工作台必须在加载第三方平台前完成隐私告知");
@@ -121,7 +133,7 @@ for (const resource of dnrResources) {
 }
 for (const domain of ["deepseek.com", "doubao.com", "yuanbao.tencent.com", "gemini.google.com", "chatgpt.com"]) check(dnrDomains.has(domain), `DNR 缺少核心平台域名：${domain}`);
 
-for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "shared/services.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "workspace/app.js", "sidepanel/app.js"]) {
+for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-core.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/privacy-ui.js", "workspace/app.js", "sidepanel/app.js", "conversation-export/preview.js"]) {
   try { execFileSync(process.execPath, ["--check", join(root, file)], { stdio: "pipe" }); }
   catch (error) { failures.push(`${file} 语法检查失败：${error.stderr?.toString() || error.message}`); }
 }

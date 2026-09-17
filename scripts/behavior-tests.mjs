@@ -14,7 +14,9 @@ const registry = sandbox.self.MultiAIServiceRegistry;
 const promptTemplates = sandbox.self.MultiAIPromptTemplates;
 vm.runInNewContext(readFileSync(join(root, "shared/export-core.js"), "utf8"), sandbox);
 const exportCore = sandbox.self.MultiAIExportCore;
-const affiliateSandbox = { chrome: { runtime: { getManifest: () => ({ version: "0.5.0" }) } }, URL, self: {} };
+vm.runInNewContext(readFileSync(join(root, "shared/conversation-export-core.js"), "utf8"), sandbox);
+const conversationExport = sandbox.self.MultiAIConversationExport;
+const affiliateSandbox = { chrome: { runtime: { getManifest: () => ({ version: "0.6.0" }) } }, URL, self: {} };
 vm.runInNewContext(readFileSync(join(root, "shared/affiliate-catalog.js"), "utf8"), affiliateSandbox);
 const affiliateCatalog = affiliateSandbox.MultiAIAffiliateCatalog;
 
@@ -249,12 +251,12 @@ test("新版工作台包含双行网格、拖动提问卡、平台抽屉和网�
   const launcher = readFileSync(join(root, "content/floating-launcher.js"), "utf8");
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
 
-  for (const id of ["composerDragHandle", "servicePanel", "selectedServices", "serviceCatalog", "settingsPanel", "launcherScope", "launcherStyle", "launcherAnimationPack", "launcherRandomFrequency", "launcherSize", "launcherSizeValue", "minimizeToggle"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["composerDragHandle", "servicePanel", "selectedServices", "serviceCatalog", "settingsPanel", "launcherScope", "launcherStyle", "launcherAnimationPack", "launcherRandomFrequency", "launcherSize", "launcherSizeValue", "launcherEdgeGap", "launcherEdgeGapValue", "launcherEdgeSnap", "launcherSingleAction", "launcherDoubleAction", "launcherTripleAction", "minimizeToggle"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /<img class="brand-mark" src="\.\.\/assets\/launcher-pet\.png"/); assert.doesNotMatch(html, /<span class="brand-mark">多<\/span>/);
   assert.match(html, /value="2x5"/);
   assert.doesNotMatch(html, /questionRail|quickAccess|快捷入口/);
   assert.match(css, /\.frames\[data-rows="2"\]\{display:grid/);
-  for (const signal of ["serviceDraft", "renderServiceManager", "bindComposerDrag", "clampComposerPosition", "launcherScope", "launcherStyle", "launcherAnimationPack", "launcherRandomFrequency", "launcherSize", "MINIMIZE_UI"]) assert.match(app, new RegExp(signal));
+  for (const signal of ["serviceDraft", "renderServiceManager", "bindComposerDrag", "clampComposerPosition", "launcherScope", "launcherStyle", "launcherAnimationPack", "launcherRandomFrequency", "launcherSize", "launcherEdgeGap", "launcherEdgeSnap", "MINIMIZE_UI"]) assert.match(app, new RegExp(signal));
   assert.equal(manifest.optional_permissions, undefined);
   assert.deepEqual(manifest.optional_host_permissions, ["http://*/*", "https://*/*"]);
   const launcherEntry = manifest.content_scripts.find((entry) => entry.js?.includes("content/floating-launcher.js"));
@@ -262,18 +264,49 @@ test("新版工作台包含双行网格、拖动提问卡、平台抽屉和网�
   assert.notEqual(launcherEntry.all_frames, true);
   assert.match(launcher, /window\.top !== window/);
   assert.match(launcher, /attachShadow/);
-  assert.match(launcher, /Math\.hypot\(dx, dy\) > 5/);
+  assert.match(launcher, /Math\.hypot\(dx, dy\) > 6/);
   assert.match(launcher, /action: "TOGGLE_SIDE_PANEL"/);
   assert.match(launcher, /action: "OPEN_WORKSPACE"/);
-  assert.match(launcher, /addEventListener\("dblclick"/);
-  assert.match(launcher, /now - lastClickAt > 360/);
+  assert.match(launcher, /activationCount >= 3/);
+  assert.match(launcher, /launcherActions\.triple/);
+  assert.match(launcher, /START_CONVERSATION_EXPORT/);
+  assert.doesNotMatch(launcher, /addEventListener\("dblclick"/);
   assert.match(launcher, /assets\/launcher-pet\.png/);
   for (const asset of ["pet-idle.webm", "pet-click.webm", "pet-drag.webm"]) assert.match(launcher, new RegExp(asset.replace(".", "\\.")));
-  for (const signal of ["clickAnimations", "ambientAnimations", "scheduleRandomAnimation", "nextRandomDelay", "animationPack", "randomFrequency", "pet-launcher", "pet-hit", "hitDimensions", "--hit-left", "--hit-width"]) assert.match(launcher, new RegExp(signal));
+  for (const signal of ["clickAnimations", "ambientAnimations", "scheduleRandomAnimation", "nextRandomDelay", "animationPack", "randomFrequency", "pet-launcher", "pet-hit", "hitDimensions", "--hit-left", "--hit-width", "launcherEdgeGap", "launcherEdgeSnap", "snapToEdge", "edgeGap", "edgeSnap"]) assert.match(launcher, new RegExp(signal));
   assert.equal(manifest.icons["128"], "assets/launcher-pet.png"); assert.equal(manifest.action.default_icon["16"], "assets/launcher-pet.png");
   assert.match(launcher, /image-mode/); assert.match(launcher, /launcherSize = 160/); assert.match(launcher, /Math\.min\(240, Math\.max\(96/);
   for (const signal of ["playAnimation(\"idle\")", "playAnimation(\"click\",", "playAnimation(\"drag\")", "playAnimation(\"ambient\",", "showFallback"]) assert.match(launcher, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(launcher, /reduceMotion\.matches[^\n]*showFallback/);
+});
+
+test("网页对话导出使用统一数据模型、真实抓取消息和独立预览页", () => {
+  const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+  const background = readFileSync(join(root, "background/index.js"), "utf8");
+  const extractor = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+  const preview = readFileSync(join(root, "conversation-export/preview.js"), "utf8");
+  const entry = manifest.content_scripts.find((row) => row.js?.includes("content/conversation-export.js"));
+  assert.ok(entry?.js.includes("shared/conversation-export-core.js"));
+  for (const signal of ["MAIW_EXTRACT_CONVERSATION", "conversation_not_found", "completeness", "profiles"]) assert.match(extractor, new RegExp(signal));
+  for (const signal of ["START_CONVERSATION_EXPORT", "chrome.storage.session", "conversation-export/preview.html", "frameId: 0"]) assert.match(background, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const signal of ["selectedConversation", "markdownFromConversation", "textFromConversation", "jsonFromConversation", "window.print", "exportImage"]) assert.match(preview, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  const conversation = { id: "test", title: "Example", platform: "deepseek", platformName: "DeepSeek", messages: [{ id: "u1", role: "user", contents: [{ type: "text", content: "Hello" }] }, { id: "a1", role: "assistant", contents: [{ type: "markdown", content: "World" }] }] };
+  assert.match(conversationExport.markdownFromConversation(conversation), /## User[\s\S]*Hello[\s\S]*## DeepSeek[\s\S]*World/);
+  assert.equal(conversationExport.selectedConversation(conversation, new Set(["a1"])).messages.length, 1);
+  assert.match(conversationExport.jsonFromConversation(conversation), /"schemaVersion": 1/);
+});
+
+test("首次使用语言跟随浏览器界面语言，已有选择优先", () => {
+  const privacy = readFileSync(join(root, "shared/privacy-ui.js"), "utf8");
+  const workspace = readFileSync(join(root, "workspace/app.js"), "utf8");
+  const sidepanel = readFileSync(join(root, "sidepanel/app.js"), "utf8");
+  assert.match(privacy, /chrome\.i18n\?\.getUILanguage\?\.\(\)/);
+  assert.match(privacy, /navigator\.languages\?\.find\(Boolean\)/);
+  assert.match(privacy, /\["zh", "en"\]\.includes\(savedLocale\)/);
+  assert.doesNotMatch(privacy, /accepted\.locale \|\| locale/);
+  assert.match(workspace, /savedLocale \|\| undefined/);
+  assert.match(sidepanel, /savedLocale \|\| undefined/);
+  assert.doesNotMatch(sidepanel, /locale: "zh"/);
 });
 
 test("原生侧栏支持单 AI 可见、多个 AI 发送和受控跨框架消息", () => {

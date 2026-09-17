@@ -16,14 +16,14 @@
       disclosure: "部分链接为推广链接。你通过这些链接注册或付费时，开发者可能获得佣金，但不会增加你的购买价格。推荐工具由第三方独立提供。",
       search: "搜索 AI 工具…", all: "全部", empty: "暂时没有可用的推广工具。", unavailable: "推荐目录暂时不可用，请稍后重试。",
       loading: "正在更新推荐目录…", refreshed: "目录已更新", cached: "当前显示缓存内容", copyCode: "复制", copied: "已复制", close: "关闭",
-      refresh: "刷新", privacy: "隐私政策", hide: "隐藏推荐入口", featured: "精选", openFailed: "链接校验失败，请刷新后重试。"
+      refresh: "刷新", privacy: "隐私政策", featured: "精选", openFailed: "链接校验失败，请刷新后重试。"
     },
     en: {
       title: "Featured AI Tools", entry: "Featured AI Tools", sponsored: "Sponsored", subtitle: "Discover AI tools for coding, creativity, and productivity",
       disclosure: "Some links are affiliate links. The developer may earn a commission if you register or purchase through them, at no additional cost to you. Recommended tools are independently provided by third parties.",
       search: "Search AI tools…", all: "All", empty: "No sponsored tools are currently available.", unavailable: "Recommendations are temporarily unavailable. Please try again later.",
       loading: "Updating recommendations…", refreshed: "Catalog updated", cached: "Showing cached content", copyCode: "Copy", copied: "Copied", close: "Close",
-      refresh: "Refresh", privacy: "Privacy Policy", hide: "Hide recommendations", featured: "Featured", openFailed: "The link could not be verified. Refresh and try again."
+      refresh: "Refresh", privacy: "Privacy Policy", featured: "Featured", openFailed: "The link could not be verified. Refresh and try again."
     }
   };
 
@@ -130,12 +130,12 @@
       for (const row of rows) { const item = document.createElement("button"); item.type = "button"; item.classList.toggle("active", row.id === category); item.textContent = localized(row, locale).name; item.onclick = () => { category = row.id; renderFilters(); renderCards(); }; holder.append(item); }
     }
     function renderShell() {
-      if (!layer) return; layer.querySelector("h2").textContent = t().title; layer.querySelector(".maiw-affiliate-sponsored").textContent = t().sponsored; layer.querySelector(".maiw-affiliate-subtitle").textContent = t().subtitle; layer.querySelector(".maiw-affiliate-disclosure").textContent = t().disclosure; layer.querySelector("input").placeholder = t().search; layer.querySelector("[data-action=refresh]").title = t().refresh; layer.querySelector("[data-action=close]").title = t().close; layer.querySelector("[data-action=privacy]").textContent = t().privacy; layer.querySelector("[data-action=hide]").textContent = t().hide; renderFilters(); renderCards();
+      if (!layer) return; layer.querySelector("h2").textContent = t().title; layer.querySelector(".maiw-affiliate-sponsored").textContent = t().sponsored; layer.querySelector(".maiw-affiliate-subtitle").textContent = t().subtitle; layer.querySelector(".maiw-affiliate-disclosure").textContent = t().disclosure; layer.querySelector("input").placeholder = t().search; layer.querySelector("[data-action=refresh]").title = t().refresh; layer.querySelector("[data-action=close]").title = t().close; layer.querySelector("[data-action=privacy]").textContent = t().privacy; renderFilters(); renderCards();
     }
     async function open() {
       if (layer) return; layer = document.createElement("div"); layer.className = `maiw-affiliate-layer${options.compact ? " compact" : ""}`; layer.setAttribute("role", "dialog"); layer.setAttribute("aria-modal", "true");
-      layer.innerHTML = '<section class="maiw-affiliate-dialog"><header><div><div class="maiw-affiliate-title"><h2></h2><span class="maiw-affiliate-sponsored"></span></div><p class="maiw-affiliate-subtitle"></p></div><div class="maiw-affiliate-head-actions"><button type="button" data-action="refresh" aria-label="Refresh">↻</button><button type="button" data-action="close" aria-label="Close">×</button></div></header><p class="maiw-affiliate-disclosure"></p><input class="maiw-affiliate-search" type="search"><nav class="maiw-affiliate-categories"></nav><div class="maiw-affiliate-status" role="status"></div><div class="maiw-affiliate-grid"></div><p class="maiw-affiliate-empty"></p><footer><button type="button" data-action="privacy"></button><button type="button" data-action="hide"></button></footer></section>';
-      layer.onclick = (event) => { if (event.target === layer) close(); }; layer.querySelector("[data-action=close]").onclick = close; layer.querySelector("[data-action=privacy]").onclick = () => global.MultiAIPrivacyUI?.openPrivacy(locale); layer.querySelector("[data-action=hide]").onclick = async () => { await chrome.storage.local.set({ [PREF_KEY]: { showEntry: false } }); await syncVisibility(); close(); };
+      layer.innerHTML = '<section class="maiw-affiliate-dialog"><header><div><div class="maiw-affiliate-title"><h2></h2><span class="maiw-affiliate-sponsored"></span></div><p class="maiw-affiliate-subtitle"></p></div><div class="maiw-affiliate-head-actions"><button type="button" data-action="refresh" aria-label="Refresh">↻</button><button type="button" data-action="close" aria-label="Close">×</button></div></header><p class="maiw-affiliate-disclosure"></p><input class="maiw-affiliate-search" type="search"><nav class="maiw-affiliate-categories"></nav><div class="maiw-affiliate-status" role="status"></div><div class="maiw-affiliate-grid"></div><p class="maiw-affiliate-empty"></p><footer><button type="button" data-action="privacy"></button></footer></section>';
+      layer.onclick = (event) => { if (event.target === layer) close(); }; layer.querySelector("[data-action=close]").onclick = close; layer.querySelector("[data-action=privacy]").onclick = () => global.MultiAIPrivacyUI?.openPrivacy(locale);
       layer.querySelector("input").oninput = (event) => { query = event.target.value; renderCards(); }; layer.querySelector("[data-action=refresh]").onclick = () => update(true); document.body.append(layer); renderShell(); layer.querySelector("input").focus();
       const cachedRecord = await cached(); if (cachedRecord) { runtime.catalog = cachedRecord.catalog; runtime.sourceBase = cachedRecord.sourceBase; renderShell(); layer.querySelector(".maiw-affiliate-status").textContent = t().cached; }
       await update(false);

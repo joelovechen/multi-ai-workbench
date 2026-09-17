@@ -4,7 +4,7 @@
   const registry = globalThis.MultiAIServiceRegistry;
   const promptTemplates = globalThis.MultiAIPromptTemplates;
   const exportCore = globalThis.MultiAIExportCore;
-  const state = { services: [...registry.defaults], serviceDraft: [], serviceCategory: "ai", layout: "auto", theme: "light", locale: "zh", openBehavior: "resume", answerMode: "expert", launcherEnabled: true, launcherScope: "supported", launcherStyle: "animated", launcherSize: 160, launcherAnimationPack: "rich", launcherRandomFrequency: "normal", contextMenuMode: "flat", operations: [], operationGroups: [], commandShortcuts: {}, composerPosition: null, widths: {}, frameUrls: {}, history: [], currentSessionId: "", files: [], lastQuestion: "", selections: [], selectionService: "", pickerServices: new Set(), workspaceTabId: null, workspaceWindowId: null };
+  const state = { services: [...registry.defaults], serviceDraft: [], serviceCategory: "ai", layout: "auto", theme: "light", locale: "", openBehavior: "resume", answerMode: "expert", launcherEnabled: true, launcherScope: "supported", launcherStyle: "animated", launcherSize: 160, launcherEdgeGap: 4, launcherEdgeSnap: true, launcherAnimationPack: "rich", launcherRandomFrequency: "normal", launcherSingleAction: "sidepanel", launcherDoubleAction: "workspace", launcherTripleAction: "export-center", contextMenuMode: "flat", operations: [], operationGroups: [], commandShortcuts: {}, composerPosition: null, widths: {}, frameUrls: {}, history: [], currentSessionId: "", files: [], lastQuestion: "", selections: [], selectionService: "", pickerServices: new Set(), workspaceTabId: null, workspaceWindowId: null };
   const $ = (selector) => document.querySelector(selector);
   const elements = {
     frames: $("#frames"), template: $("#frameTemplate"), question: $("#question"), send: $("#send"), status: $("#status"),
@@ -20,7 +20,7 @@
   const sendRuntime = (message) => new Promise((resolve) => chrome.runtime.sendMessage(message, (response) => resolve(chrome.runtime.lastError ? { ok: false, reason: chrome.runtime.lastError.message } : response)));
 
   function setStatus(message, isError = false) {
-    elements.status.textContent = message;
+    elements.status.textContent = globalThis.MultiAIUiI18n?.translate(message, state.locale) || message;
     elements.status.style.color = isError ? "#dc2626" : "";
   }
 
@@ -61,7 +61,7 @@
   }
 
   async function persistSettings() {
-    await storageSet({ "maiw.settings": { services: state.services, layout: state.layout, theme: state.theme, locale: state.locale, openBehavior: state.openBehavior, answerMode: state.answerMode, launcherEnabled: state.launcherEnabled, launcherScope: state.launcherScope, launcherStyle: state.launcherStyle, launcherSize: state.launcherSize, launcherAnimationPack: state.launcherAnimationPack, launcherRandomFrequency: state.launcherRandomFrequency, contextMenuMode: state.contextMenuMode, composerPosition: state.composerPosition, widths: state.widths, currentSessionId: state.currentSessionId } });
+    await storageSet({ "maiw.settings": { services: state.services, layout: state.layout, theme: state.theme, locale: state.locale, openBehavior: state.openBehavior, answerMode: state.answerMode, launcherEnabled: state.launcherEnabled, launcherScope: state.launcherScope, launcherStyle: state.launcherStyle, launcherSize: state.launcherSize, launcherEdgeGap: state.launcherEdgeGap, launcherEdgeSnap: state.launcherEdgeSnap, launcherAnimationPack: state.launcherAnimationPack, launcherRandomFrequency: state.launcherRandomFrequency, launcherSingleAction: state.launcherSingleAction, launcherDoubleAction: state.launcherDoubleAction, launcherTripleAction: state.launcherTripleAction, contextMenuMode: state.contextMenuMode, composerPosition: state.composerPosition, widths: state.widths, currentSessionId: state.currentSessionId } });
   }
 
   function openDrawer(panel) {
@@ -77,7 +77,7 @@
   function fillGroupOptions() { const select = $("#operationGroup"); select.replaceChildren(new Option("直接显示", "")); for (const group of state.operationGroups) select.append(new Option(group.name, group.id)); }
   function renderOperationServices(selected = []) { const holder = $("#operationServices"); holder.replaceChildren(); for (const service of registry.ai) { const label = document.createElement("label"), input = document.createElement("input"); input.type = "checkbox"; input.value = service.key; input.checked = selected.includes(service.key); label.append(input, document.createTextNode(service.name)); holder.append(label); } holder.hidden = $("#operationTargetMode").value !== "fixed"; }
   function openPromptTemplateForm(operation = null) {
-    const source = operation || { id: "", name: "", icon: "自", category: "custom", prompt: "请按以下要求处理内容：\n\n{{content}}", enabled: true, showInContextMenu: true, showInPicker: true, groupId: "", targetMode: "selection", serviceKeys: [], answerMode: "inherit", execution: "preview", shortcutSlot: 0 };
+    const source = operation ? promptTemplates.localizeOperation(operation, state.locale) : { id: "", name: "", icon: state.locale === "en" ? "Cu" : "自", category: "custom", prompt: state.locale === "en" ? "Follow these instructions for the content below:\n\n{{content}}" : "请按以下要求处理内容：\n\n{{content}}", enabled: true, showInContextMenu: true, showInPicker: true, groupId: "", targetMode: "selection", serviceKeys: [], answerMode: "inherit", execution: "preview", shortcutSlot: 0 };
     fillGroupOptions(); $("#promptTemplateId").value = source.id || ""; $("#promptTemplateName").value = source.name; $("#operationIcon").value = source.icon || "自"; $("#promptTemplateCategory").value = source.category || "custom"; $("#operationGroup").value = source.groupId || ""; $("#operationEnabled").checked = source.enabled !== false; $("#operationShowContext").checked = source.showInContextMenu !== false; $("#operationShowPicker").checked = source.showInPicker !== false; $("#promptTemplatePrompt").value = source.prompt; $("#operationTargetMode").value = source.targetMode || "selection"; $("#operationExecution").value = source.execution || "preview"; $("#operationAnswerMode").value = source.answerMode || "inherit"; $("#operationShortcutSlot").value = String(source.shortcutSlot || 0); renderOperationServices(source.serviceKeys || []); $("#deleteOperation").hidden = Boolean(source.builtin) || !source.id; $("#restoreOperation").hidden = !source.builtin; $("#promptTemplateForm").hidden = false; $("#operationGroupForm").hidden = true; $("#promptTemplateName").focus();
   }
   async function savePromptTemplates() { await storageSet({ "maiw.operations": state.operations, "maiw.operationGroups": state.operationGroups }); await persistSettings(); renderPromptTemplates(); }
@@ -246,13 +246,15 @@
     $("#newChat").title = en ? "New chat" : "新对话"; $("#newChat").setAttribute("aria-label", $("#newChat").title);
     $("#historyToggle").title = en ? "History" : "历史记录"; $("#historyToggle").setAttribute("aria-label", $("#historyToggle").title);
     $("#settingsToggle").title = en ? "Settings" : "配置"; $("#settingsToggle").setAttribute("aria-label", $("#settingsToggle").title);
+    $("#optionalContentSettingsTitle").textContent = en ? "Optional content settings" : "可选内容设置";
+    $("#optionalContentSettingsHint").textContent = en ? "Sponsored entry and other non-core content" : "推广入口与其他非核心内容";
     $("#affiliateSettingTitle").textContent = en ? "Featured AI Tools" : "AI 工具精选";
-    $("#affiliateSettingHint").textContent = en ? "Shows an optional, clearly labeled sponsored-link entry in the toolbar" : "顶部入口包含明确标注的可选推广链接";
+    $("#affiliateSettingHint").textContent = en ? "Shows clearly labeled sponsored-link entries in the toolbar and side panel" : "顶部及侧栏入口包含明确标注的可选推广链接";
     elements.add.title = en ? "Manage platforms" : "管理平台（添加、移除和排序）"; elements.add.setAttribute("aria-label", en ? "Manage platforms" : "管理平台");
     elements.question.placeholder = en ? "Ask multiple AI services at once…" : "输入一个问题，同时询问多个 AI…"; elements.send.textContent = en ? "Send to all" : "同时提问";
     $("#attachLabel").childNodes[0].nodeValue = en ? "Add files" : "添加附件";
     for (const button of [$("#historyClose"), $("#exportClose"), $("#notesClose"), $("#serviceClose"), $("#settingsClose")]) button.setAttribute("aria-label", en ? "Close" : "关闭");
-    $("#locale").value = state.locale; affiliateController?.setLocale(state.locale);
+    $("#locale").value = state.locale; affiliateController?.setLocale(state.locale); globalThis.MultiAIUiI18n?.applyDocument(state.locale);
   }
 
   function fileToPayload(file) {
@@ -507,8 +509,8 @@
     if (validLayouts.includes(settings.layout)) state.layout = settings.layout;
     else if (["1", "2", "3", "4", "5"].includes(settings.layout)) state.layout = `1x${settings.layout}`;
     if (["light", "dark"].includes(settings.theme)) state.theme = settings.theme;
-    if (["zh", "en"].includes(settings.locale)) state.locale = settings.locale;
-    const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: state.locale, onLocaleChange: (locale) => { state.locale = locale; } });
+    const savedLocale = ["zh", "en"].includes(settings.locale) ? settings.locale : "";
+    const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: savedLocale || undefined, onLocaleChange: (locale) => { state.locale = locale; } });
     state.locale = consent.locale;
     if (["new", "resume"].includes(settings.openBehavior)) state.openBehavior = settings.openBehavior;
     if (["expert", "fast"].includes(settings.answerMode)) state.answerMode = settings.answerMode;
@@ -516,6 +518,12 @@
     state.launcherScope = !state.launcherEnabled || settings.launcherScope === "off" ? "off" : (settings.launcherScope === "all" ? "all" : "supported");
     state.launcherStyle = settings.launcherStyle === "image" ? "image" : "animated";
     state.launcherSize = Math.min(240, Math.max(96, Number(settings.launcherSize) || 160));
+    state.launcherEdgeGap = Math.min(32, Math.max(0, Number.isFinite(Number(settings.launcherEdgeGap)) ? Number(settings.launcherEdgeGap) : 4));
+    state.launcherEdgeSnap = settings.launcherEdgeSnap !== false;
+    const launcherActionValues = new Set(["sidepanel", "workspace", "export-center", "hide", "none"]);
+    state.launcherSingleAction = launcherActionValues.has(settings.launcherSingleAction) ? settings.launcherSingleAction : "sidepanel";
+    state.launcherDoubleAction = launcherActionValues.has(settings.launcherDoubleAction) ? settings.launcherDoubleAction : "workspace";
+    state.launcherTripleAction = launcherActionValues.has(settings.launcherTripleAction) ? settings.launcherTripleAction : "export-center";
     state.launcherAnimationPack = settings.launcherAnimationPack === "basic" ? "basic" : "rich";
     state.launcherRandomFrequency = ["off", "low", "normal", "high"].includes(settings.launcherRandomFrequency) ? settings.launcherRandomFrequency : "normal";
     state.contextMenuMode = settings.contextMenuMode === "grouped" ? "grouped" : "flat";
@@ -527,14 +535,14 @@
     if (state.openBehavior === "new" || !state.history.some((row) => row.id === state.currentSessionId)) createSession();
     else state.frameUrls = sanitizeFrameUrls(state.history.find((row) => row.id === state.currentSessionId)?.urls, true);
     document.documentElement.dataset.theme = state.theme; renderFrames(); renderHistory(); renderQuestionRail(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale }); applyLocale();
-    $("#openBehavior").value = state.openBehavior; $("#answerMode").value = state.answerMode; $("#settingsAnswerMode").value = state.answerMode; $("#launcherScope").value = state.launcherScope; $("#launcherStyle").value = state.launcherStyle; $("#launcherAnimationPack").value = state.launcherAnimationPack; $("#launcherRandomFrequency").value = state.launcherRandomFrequency; $("#launcherSize").value = String(state.launcherSize); $("#launcherSizeValue").value = `${state.launcherSize} px`; $("#affiliateEntryVisible").checked = stored["maiw.affiliateCatalog.preferences"]?.showEntry !== false; $("#contextMenuMode").value = state.contextMenuMode; const commands = await chrome.commands.getAll(); state.commandShortcuts = Object.fromEntries(commands.map((row) => [row.name, row.shortcut])); renderPromptTemplates();
+    $("#openBehavior").value = state.openBehavior; $("#answerMode").value = state.answerMode; $("#settingsAnswerMode").value = state.answerMode; $("#launcherScope").value = state.launcherScope; $("#launcherStyle").value = state.launcherStyle; $("#launcherAnimationPack").value = state.launcherAnimationPack; $("#launcherRandomFrequency").value = state.launcherRandomFrequency; $("#launcherSize").value = String(state.launcherSize); $("#launcherSizeValue").value = `${state.launcherSize} px`; $("#launcherEdgeGap").value = String(state.launcherEdgeGap); $("#launcherEdgeGapValue").value = `${state.launcherEdgeGap} px`; $("#launcherEdgeSnap").checked = state.launcherEdgeSnap; $("#launcherSingleAction").value = state.launcherSingleAction; $("#launcherDoubleAction").value = state.launcherDoubleAction; $("#launcherTripleAction").value = state.launcherTripleAction; $("#affiliateEntryVisible").checked = stored["maiw.affiliateCatalog.preferences"]?.showEntry !== false; $("#contextMenuMode").value = state.contextMenuMode; const commands = await chrome.commands.getAll(); state.commandShortcuts = Object.fromEntries(commands.map((row) => [row.name, row.shortcut])); renderPromptTemplates();
     requestAnimationFrame(() => {
       if (state.composerPosition) clampComposerPosition();
       else if (settings.questionPosition === "top") clampComposerPosition({ x: (innerWidth - elements.composer.getBoundingClientRect().width) / 2, y: 78 });
       else resetComposerPosition(false);
     });
     const registration = await sendRuntime({ action: "REGISTER_WORKSPACE" }); state.workspaceTabId = registration?.tabId ?? null; state.workspaceWindowId = registration?.windowId ?? null;
-    const openSettings = (await chrome.storage.session.get("maiw.openSettings"))["maiw.openSettings"]; if (["templates", "operations"].includes(openSettings)) { await chrome.storage.session.remove("maiw.openSettings"); openDrawer(elements.settingsPanel); showSettingsTab("operations"); }
+    const openSettings = (await chrome.storage.session.get("maiw.openSettings"))["maiw.openSettings"]; if (["templates", "operations", "general"].includes(openSettings)) { await chrome.storage.session.remove("maiw.openSettings"); openDrawer(elements.settingsPanel); showSettingsTab(openSettings === "general" ? "general" : "operations"); }
     if (!stored["maiw.guideSeen"]) showInstallGuide();
   }
 
@@ -612,6 +620,10 @@
   $("#launcherRandomFrequency").addEventListener("change", async (event) => { state.launcherRandomFrequency = ["off", "low", "normal", "high"].includes(event.target.value) ? event.target.value : "normal"; await persistSettings(); setStatus(state.launcherRandomFrequency === "off" ? "随机休闲动作已关闭。" : "随机休闲动作频率已更新。"); });
   $("#launcherSize").addEventListener("input", (event) => { $("#launcherSizeValue").value = `${event.target.value} px`; });
   $("#launcherSize").addEventListener("change", async (event) => { state.launcherSize = Math.min(240, Math.max(96, Number(event.target.value) || 160)); $("#launcherSizeValue").value = `${state.launcherSize} px`; await persistSettings(); setStatus(`桌宠大小已调整为 ${state.launcherSize} px。`); });
+  $("#launcherEdgeGap").addEventListener("input", (event) => { $("#launcherEdgeGapValue").value = `${event.target.value} px`; });
+  $("#launcherEdgeGap").addEventListener("change", async (event) => { state.launcherEdgeGap = Math.min(32, Math.max(0, Number(event.target.value) || 0)); $("#launcherEdgeGapValue").value = `${state.launcherEdgeGap} px`; await persistSettings(); setStatus(`桌宠贴边距离已调整为 ${state.launcherEdgeGap} px。`); });
+  $("#launcherEdgeSnap").addEventListener("change", async (event) => { state.launcherEdgeSnap = event.target.checked; await persistSettings(); setStatus(state.launcherEdgeSnap ? "桌宠边缘吸附已开启。" : "桌宠边缘吸附已关闭。"); });
+  for (const [id, stateKey] of [["launcherSingleAction", "launcherSingleAction"], ["launcherDoubleAction", "launcherDoubleAction"], ["launcherTripleAction", "launcherTripleAction"]]) $("#" + id).addEventListener("change", async (event) => { state[stateKey] = event.target.value; await persistSettings(); setStatus("桌宠点击动作已更新。"); });
   $("#resetLauncherPosition").addEventListener("click", async () => { await chrome.storage.local.remove("maiw.launcherPosition"); setStatus("网页桌宠位置已恢复默认。"); });
   $("#resetComposerPosition").addEventListener("click", () => { resetComposerPosition(); setStatus("提问框位置已恢复默认。"); });
   $("#exportMarkdown").addEventListener("click", downloadMarkdown);

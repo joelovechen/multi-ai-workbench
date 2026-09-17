@@ -23,6 +23,12 @@
   }
   const builtIns = Object.freeze(defaults.map(operationFromTuple));
   const builtInById = Object.freeze(Object.fromEntries(builtIns.map((row) => [row.id, row])));
+  const englishBuiltIns = Object.freeze({
+    "translate-zh": { name: "Chinese–English Translation", icon: "Tr", prompt: "Detect the main language below and translate between Chinese and English. Translate mainly Chinese content into natural, accurate English and mainly English content into natural, accurate Simplified Chinese. For mixed content, follow the dominant language. Preserve meaning, tone, numbers, paragraphs, lists, code, Markdown, links, and proper nouns. Do not explain, summarize, or answer questions; output only the translation.\n\n<content>\n{{content}}\n</content>" },
+    summarize: { name: "Summarize", icon: "Su", prompt: "Summarize the content accurately. Start with a one-sentence conclusion, then provide 3–5 bullets covering key facts, claims, data, and conclusions. List explicit action items, risks, or limitations separately when present. Preserve names, numbers, dates, and terminology; do not invent information.\n\n<content>\n{{content}}\n</content>" },
+    "explain-simple": { name: "Plain-language Explanation", icon: "Ex", prompt: "Explain the content in clear, accurate language. State its overall meaning, explain important concepts, terms, relationships, or context, and add one short example when useful. If it is ambiguous, list the most likely interpretations without inventing facts. Preserve the original meaning; do not turn this into a translation or summary.\n\n<content>\n{{content}}\n</content>" }
+  });
+  function localizeOperation(operation, locale) { return locale === "en" && operation?.builtin && englishBuiltIns[operation.id] ? { ...operation, ...englishBuiltIns[operation.id] } : operation; }
 
   function normalizeOperation(value, fallback = null) {
     if (!value || typeof value !== "object") return fallback;
@@ -96,5 +102,5 @@
   }
   function restoreBuiltin(id) { return builtInById[id] ? { ...builtInById[id] } : null; }
 
-  global.MultiAIPromptTemplates = Object.freeze({ categories, builtIns, builtInById, defaultMenuIds, normalizeOperation, normalizeGroup, migrateLegacy, resolveConfiguration, find, build, restoreBuiltin });
+  global.MultiAIPromptTemplates = Object.freeze({ categories, builtIns, builtInById, defaultMenuIds, normalizeOperation, normalizeGroup, migrateLegacy, resolveConfiguration, find, build, restoreBuiltin, localizeOperation });
 })(typeof self !== "undefined" ? self : window);

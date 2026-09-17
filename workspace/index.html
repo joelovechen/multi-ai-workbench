@@ -79,6 +79,11 @@
       <label class="setting-row"><div><strong>动画内容</strong><small>丰富模式会随机切换点击反馈和休闲动作</small></div><select id="launcherAnimationPack"><option value="rich">丰富动作（推荐）</option><option value="basic">基础动作</option></select></label>
       <label class="setting-row"><div><strong>随机动作频率</strong><small>页面处于后台时会自动暂停</small></div><select id="launcherRandomFrequency"><option value="off">关闭</option><option value="low">低（60–120 秒）</option><option value="normal">正常（30–60 秒）</option><option value="high">高（15–30 秒）</option></select></label>
       <label class="setting-row launcher-size-row"><div><strong>桌宠大小</strong><small>动画按高度计算，图片按宽高计算</small></div><div class="range-control"><input id="launcherSize" type="range" min="96" max="240" step="8" value="160"><output id="launcherSizeValue" for="launcherSize">160 px</output></div></label>
+      <label class="setting-row launcher-size-row"><div><strong>桌宠贴边距离</strong><small>按人物可点击区域计算，而不是透明画布</small></div><div class="range-control"><input id="launcherEdgeGap" type="range" min="0" max="32" step="1" value="4"><output id="launcherEdgeGapValue" for="launcherEdgeGap">4 px</output></div></label>
+      <label class="setting-row"><div><strong>拖到边缘自动吸附</strong><small>接近页面边缘时自动贴齐</small></div><label class="switch" title="拖到边缘自动吸附"><input id="launcherEdgeSnap" type="checkbox" checked><span></span></label></label>
+      <label class="setting-row"><div><strong>单击桌宠</strong><small>等待 360 毫秒确认没有后续点击后执行</small></div><select id="launcherSingleAction"><option value="sidepanel">打开 / 关闭侧栏</option><option value="workspace">打开全屏工作台</option><option value="export-center">打开对话导出中心</option><option value="none">不执行操作</option></select></label>
+      <label class="setting-row"><div><strong>双击桌宠</strong><small>一次点击序列只执行一个动作</small></div><select id="launcherDoubleAction"><option value="workspace">打开全屏工作台</option><option value="sidepanel">打开 / 关闭侧栏</option><option value="export-center">打开对话导出中心</option><option value="none">不执行操作</option></select></label>
+      <label class="setting-row"><div><strong>三击桌宠</strong><small>默认打开完整导出中心，不会立即抓取对话</small></div><select id="launcherTripleAction"><option value="export-center">打开对话导出中心</option><option value="workspace">打开全屏工作台</option><option value="sidepanel">打开 / 关闭侧栏</option><option value="none">不执行操作</option></select></label>
       <button id="resetLauncherPosition">恢复桌宠默认位置</button>
       <button id="resetComposerPosition">恢复提问框默认位置</button>
     </section>
@@ -86,9 +91,12 @@
       <div class="setting-row"><div><strong>隐私与开源信息</strong><small>了解本地数据、第三方平台与扩展权限</small></div></div>
       <div class="legal-settings-actions"><button id="privacyPolicyOpen">隐私政策</button><button id="aboutOpen">关于与联系</button></div>
     </section>
-    <section class="settings-section affiliate-settings">
-      <div class="setting-row"><div><strong id="affiliateSettingTitle">AI 工具精选</strong><small id="affiliateSettingHint">顶部入口包含明确标注的可选推广链接</small></div><label class="switch" title="显示 AI 工具精选入口"><input id="affiliateEntryVisible" type="checkbox" checked><span></span></label></div>
-    </section>
+    <details class="optional-content-settings">
+      <summary><span id="optionalContentSettingsTitle">可选内容设置</span><small id="optionalContentSettingsHint">推广入口与其他非核心内容</small></summary>
+      <section class="settings-section affiliate-settings">
+        <div class="setting-row"><div><strong id="affiliateSettingTitle">AI 工具精选</strong><small id="affiliateSettingHint">顶部及侧栏入口包含明确标注的可选推广链接</small></div><label class="switch" title="显示 AI 工具精选入口"><input id="affiliateEntryVisible" type="checkbox" checked><span></span></label></div>
+      </section>
+    </details>
     </div>
     <section id="operationSettings" class="settings-section operation-settings" hidden>
       <div class="operation-toolbar"><label>菜单模式<select id="contextMenuMode"><option value="flat">默认平铺</option><option value="grouped">允许一层分组</option></select></label><div><button id="newOperationGroup">＋ 分组</button><button id="newPromptTemplate">＋ 操作</button></div></div>
@@ -134,6 +142,6 @@
     </article>
   </template>
 
-  <script src="../shared/services.js"></script><script src="../shared/platform-adapters.js"></script><script src="../shared/prompt-templates.js"></script><script src="../shared/export-core.js"></script><script src="../shared/privacy-ui.js"></script><script src="../shared/affiliate-public-key.js"></script><script src="../shared/affiliate-catalog.js"></script><script src="app.js"></script>
+  <script src="../shared/services.js"></script><script src="../shared/platform-adapters.js"></script><script src="../shared/prompt-templates.js"></script><script src="../shared/export-core.js"></script><script src="../shared/privacy-ui.js"></script><script src="../shared/ui-i18n.js"></script><script src="../shared/affiliate-public-key.js"></script><script src="../shared/affiliate-catalog.js"></script><script src="app.js"></script>
 </body>
 </html>

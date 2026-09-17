@@ -1,11 +1,12 @@
 (function (global) {
   "use strict";
-  const KEY = "maiw.privacyConsent", VERSION = 4, PET_ORIGINS = ["http://*/*", "https://*/*"];
+  const KEY = "maiw.privacyConsent", VERSION = 5, PET_ORIGINS = ["http://*/*", "https://*/*"];
   const text = {
     zh: { first: "首次使用", title: "欢迎使用多AI问答助手", lead: "开始前，请选择界面语言、桌宠范围并了解内容会被发送到哪里。", language: "界面语言", pet: "网页桌宠显示范围", petAll: "所有普通网页（推荐）", petSupported: "仅支持的 AI/搜索平台", petText: "选择所有网页时，浏览器会请求一次可选的网站访问权限，仅用于显示桌宠入口；不会因此读取或上传网页内容。", local: "本地保存", localText: "设置、历史、提示词、侧栏草稿和划线笔记保存在当前浏览器中。", send: "发送给所选平台", sendText: "问题、选中文字和附件仅在你主动发送时直接交给所选 AI 平台，并受该平台隐私政策约束。为在工作台内显示官方网页，扩展仅对列明平台的子框架移除 CSP/X-Frame-Options 响应头。", server: "不上传提问数据", serverText: "本插件不设产品账号，不收集遥测，不托管 API 密钥，也不经营问题中转服务。", affiliate: "可选 AI 工具推广", affiliateText: "顶部“AI 工具精选”包含明确标注的推广链接。扩展会从 GitHub Pages 和 Cloudflare Pages 获取公开目录与图标；你通过链接注册或付费时，开发者可能获得佣金。可在设置中隐藏入口。", caution: "请不要向第三方 AI 平台发送密码、身份证号、商业秘密等敏感内容。", privacy: "查看完整隐私政策", go: "了解并继续", foot: "若拒绝网站权限，将自动使用“仅支持平台”模式；可随时在配置中修改。", about: "关于多AI问答助手", aboutText: "免费开源的多平台提问与回答对比工具；独立开发，与所支持平台不存在隶属或合作关系。", developer: "开发者", contact: "联系方式", source: "开源地址", issues: "GitHub Issues", close: "关闭" },
     en: { first: "First use", title: "Welcome to Multi AI Workbench", lead: "Choose your language and pet visibility, then review where your content is sent.", language: "Interface language", pet: "Web pet visibility", petAll: "All regular websites (recommended)", petSupported: "Supported AI/search sites only", petText: "All websites requests optional site access only to render the pet launcher. This permission does not make the extension read or upload page content.", local: "Stored locally", localText: "Settings, history, prompts, side-panel drafts, highlights, and notes stay in this browser.", send: "Sent to selected services", sendText: "Questions, selected text, and files are sent directly to services you choose only when you initiate the action. To display official pages inside the workbench, the extension removes CSP/X-Frame-Options response headers only from listed service subframes. Each service applies its own privacy policy.", server: "No prompt-data server", serverText: "The extension has no product account, telemetry, API-key hosting, or operator-run prompt proxy.", affiliate: "Optional sponsored AI tools", affiliateText: "The Featured AI Tools entry contains clearly labeled affiliate links. The extension fetches a public catalog and icons from GitHub Pages and Cloudflare Pages. The developer may earn a commission if you register or purchase. You can hide the entry in Settings.", caution: "Do not send passwords, identity numbers, trade secrets, or other sensitive content to third-party AI services.", privacy: "Read the full Privacy Policy", go: "Understand and continue", foot: "If site access is declined, the extension falls back to supported sites only. You can change this later in Settings.", about: "About Multi AI Workbench", aboutText: "A free and open-source tool for asking and comparing answers across AI services. It is independently developed and is not affiliated with supported services.", developer: "Developer", contact: "Contact", source: "Source code", issues: "GitHub Issues", close: "Close" }
   };
-  const localeOf = (value) => value === "en" ? "en" : "zh";
+  const localeOf = (value) => String(value || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  const browserLocale = () => localeOf(chrome.i18n?.getUILanguage?.() || navigator.languages?.find(Boolean) || navigator.language || "en");
   const privacyUrl = (locale) => `${chrome.runtime.getURL("privacy/index.html")}?lang=${localeOf(locale)}`;
   function style() {
     if (document.querySelector("#maiwPrivacyStyle")) return;
@@ -15,8 +16,9 @@
   }
   async function ensureConsent(options = {}) {
     const stored = await chrome.storage.local.get([KEY, "maiw.settings"]), accepted = stored[KEY];
-    let locale = localeOf(options.locale || stored["maiw.settings"]?.locale || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en"));
-    if (accepted?.version === VERSION) return { accepted: true, locale: localeOf(accepted.locale || locale) };
+    const savedLocale = stored["maiw.settings"]?.locale;
+    let locale = options.locale ? localeOf(options.locale) : (["zh", "en"].includes(savedLocale) ? savedLocale : (["zh", "en"].includes(accepted?.locale) ? accepted.locale : browserLocale()));
+    if (accepted?.version === VERSION) return { accepted: true, locale };
     style();
     return new Promise((resolve) => {
       const layer = document.createElement("div"); layer.className = "maiw-legal-layer"; layer.setAttribute("role", "dialog"); layer.setAttribute("aria-modal", "true");
@@ -30,5 +32,5 @@
   }
   const openPrivacy = (locale) => chrome.tabs.create({ url: privacyUrl(locale) });
   function openAbout(localeValue) { style(); const locale = localeOf(localeValue), t = text[locale], layer = document.createElement("div"), profile = "https://github.com/joelovechen", source = `${profile}/multi-ai-workbench`; layer.className = "maiw-legal-layer"; layer.innerHTML = `<section class="maiw-legal-card"><h2>${t.about}</h2><p class="maiw-legal-lead">${t.aboutText}</p><dl class="maiw-about-grid"><dt>${t.developer}</dt><dd><a href="${profile}" target="_blank" rel="noopener">joelovechen</a></dd><dt>${t.contact}</dt><dd><a href="${source}/issues" target="_blank" rel="noopener">${t.issues}</a></dd><dt>${t.source}</dt><dd><a href="${source}" target="_blank" rel="noopener">multi-ai-workbench</a></dd></dl><div class="maiw-legal-actions"><a href="${privacyUrl(locale)}" target="_blank" rel="noopener">${t.privacy}</a><button id="maiwAboutClose">${t.close}</button></div></section>`; const close = () => layer.remove(); layer.onclick = (event) => { if (event.target === layer) close(); }; layer.querySelector("#maiwAboutClose").onclick = close; document.body.append(layer); }
-  global.MultiAIPrivacyUI = Object.freeze({ ensureConsent, openPrivacy, openAbout, privacyUrl });
+  global.MultiAIPrivacyUI = Object.freeze({ ensureConsent, openPrivacy, openAbout, privacyUrl, browserLocale });
 })(globalThis);

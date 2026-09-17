@@ -1,6 +1,6 @@
 {
-  "extensionName": { "message": "多AI问答助手（侧栏实验）" },
-  "extensionShortName": { "message": "多AI实验" },
+  "extensionName": { "message": "多AI问答助手" },
+  "extensionShortName": { "message": "多AI问答" },
   "extensionDescription": { "message": "同时向多个 AI 官方网页提问，并排或在侧栏切换比较回答；支持本地提示词、历史、划线笔记与导出。" },
   "actionTitle": { "message": "打开多AI问答助手" },
   "commandAskSelection": { "message": "使用已选 AI 处理选中的网页文字" },

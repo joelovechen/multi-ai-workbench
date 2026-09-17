@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>对话导出预览</title>
+  <link rel="icon" type="image/png" href="../assets/launcher-pet.png">
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="../assets/launcher-pet.png" alt=""><div><strong id="pageTitle">对话导出</strong><small id="sourceLabel">正在读取当前对话…</small></div></div>
+    <div class="top-actions"><button id="themeButton" type="button" title="切换主题">◐</button><button id="closeButton" type="button">关闭</button></div>
+  </header>
+  <main>
+    <aside class="sidebar">
+      <section class="card title-card"><label id="titleLabel" for="titleInput">文件标题</label><input id="titleInput" maxlength="120"><div class="meta" id="meta"></div></section>
+      <section class="card"><div class="section-head"><strong id="selectLabel">选择消息</strong><span id="selectionCount">0 / 0</span></div><label class="check"><input id="selectAll" type="checkbox" checked> <span id="selectAllLabel">全选</span></label><label><span id="rangeStartLabel">起始消息</span><select id="rangeStart"></select></label><label><span id="rangeEndLabel">结束消息</span><select id="rangeEnd"></select></label><button id="applyRange" type="button">应用范围</button></section>
+      <section class="card"><label id="searchLabel" for="searchInput">搜索对话</label><input id="searchInput" type="search" placeholder="输入关键词筛选"><label class="check"><input id="includeMetadata" type="checkbox" checked> <span id="metadataLabel">包含平台、来源和导出时间</span></label><label class="check"><input id="includeThinking" type="checkbox"> <span id="thinkingLabel">包含思考过程</span></label></section>
+      <section class="card warning" id="warningCard" hidden></section>
+    </aside>
+    <section class="preview-column">
+      <div class="preview-toolbar"><strong id="previewLabel">预览</strong><span id="status" role="status"></span></div>
+      <div id="messages" class="messages"></div>
+    </section>
+  </main>
+  <footer class="export-bar">
+    <button data-format="copy" type="button">复制 Markdown</button>
+    <button data-format="markdown" type="button">Markdown</button>
+    <button data-format="text" type="button">TXT</button>
+    <button data-format="json" type="button">JSON</button>
+    <button data-format="word" type="button">Word</button>
+    <button data-format="image" type="button">长图</button>
+    <button data-format="pdf" class="primary" type="button">打印 / PDF</button>
+  </footer>
+  <script src="../shared/conversation-export-core.js"></script>
+  <script src="preview.js"></script>
+</body>
+</html>

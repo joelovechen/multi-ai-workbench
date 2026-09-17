@@ -1,9 +1,13 @@
 importScripts("../shared/services.js");
 importScripts("../shared/platform-adapters.js");
 importScripts("../shared/prompt-templates.js");
+importScripts("../shared/ui-i18n.js");
+importScripts("../shared/conversation-export-core.js");
 
 const registry = self.MultiAIServiceRegistry;
 const promptTemplates = self.MultiAIPromptTemplates;
+const uiI18n = self.MultiAIUiI18n || { translate: (value) => value };
+const conversationExport = self.MultiAIConversationExport;
 const workspaceUrl = chrome.runtime.getURL("workspace/index.html");
 const workspaceTabs = new Set();
 const CONTEXT_ROOT = "maiw-selection-root";
@@ -66,9 +70,10 @@ async function getActionConfiguration() {
 async function rebuildContextMenus() {
   if (!chrome.contextMenus) return;
   await chrome.contextMenus.removeAll();
-  chrome.contextMenus.create({ id: CONTEXT_ROOT, title: "多AI问答助手", contexts: ["selection"] });
-  chrome.contextMenus.create({ id: CONTEXT_DIRECT, parentId: CONTEXT_ROOT, title: "问 直接提问", contexts: ["selection"] });
   const { settings, operations, groups } = await getActionConfiguration();
+  const tr = (zh) => uiI18n.translate(zh, settings.locale);
+  chrome.contextMenus.create({ id: CONTEXT_ROOT, title: tr("多AI问答助手"), contexts: ["selection"] });
+  chrome.contextMenus.create({ id: CONTEXT_DIRECT, parentId: CONTEXT_ROOT, title: settings.locale === "en" ? "Ask directly" : "问 直接提问", contexts: ["selection"] });
   const visible = operations.filter((row) => row.enabled && row.showInContextMenu);
   const groupedMode = settings.contextMenuMode === "grouped";
   const groupMap = new Map(groups.filter((row) => row.enabled).map((row) => [row.id, row]));
@@ -83,13 +88,13 @@ async function rebuildContextMenus() {
     chrome.contextMenus.create({ id: `${CONTEXT_ACTION_PREFIX}${operation.id}`, parentId, title: `${shortcut}${operation.icon} ${operation.name}`, contexts: ["selection"] });
   }
   chrome.contextMenus.create({ id: "maiw-selection-separator", parentId: CONTEXT_ROOT, type: "separator", contexts: ["selection"] });
-  chrome.contextMenus.create({ id: CONTEXT_MORE, parentId: CONTEXT_ROOT, title: "选择其他操作…", contexts: ["selection"] });
-  chrome.contextMenus.create({ id: CONTEXT_MANAGE, parentId: CONTEXT_ROOT, title: "管理右键操作…", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: CONTEXT_MORE, parentId: CONTEXT_ROOT, title: settings.locale === "en" ? "Choose another action…" : "选择其他操作…", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: CONTEXT_MANAGE, parentId: CONTEXT_ROOT, title: settings.locale === "en" ? "Manage context actions…" : "管理右键操作…", contexts: ["selection"] });
 }
 
 async function queueSidePanelTask(tab, task) {
   const windowId = await resolveWindowId(tab?.windowId, tab);
-  const { operations } = await getActionConfiguration();
+  const { operations, settings } = await getActionConfiguration();
   const operation = task.actionId ? operations.find((row) => row.id === task.actionId && row.enabled) : null;
   const content = String(task.content || "").trim().slice(0, 20000);
   const targetMode = operation?.targetMode || "selection";
@@ -99,7 +104,7 @@ async function queueSidePanelTask(tab, task) {
     autoSend: Boolean(requestedAutoSend && (operation || task.directAsk) && content && content.length <= 5000 && targetMode !== "ask"),
     targetMode, serviceKeys: operation?.serviceKeys || [], answerMode: operation?.answerMode || "inherit",
     pageTitle: String(task.pageTitle || tab?.title || "").slice(0, 500), pageUrl: String(task.pageUrl || tab?.url || "").slice(0, 4000),
-    notice: requestedAutoSend && content.length > 5000 ? "选中文字较长，请确认内容后再发送。" : (!operation && task.actionId ? "绑定的操作不存在或已停用，请重新选择。" : ""), createdAt: Date.now()
+    notice: requestedAutoSend && content.length > 5000 ? (settings.locale === "en" ? "The selected text is long. Review it before sending." : "选中文字较长，请确认内容后再发送。") : (!operation && task.actionId ? (settings.locale === "en" ? "The assigned action is missing or disabled. Choose another action." : "绑定的操作不存在或已停用，请重新选择。") : ""), createdAt: Date.now()
   };
   await chrome.storage.session.set({ "maiw.pendingTask": pendingTask });
   return { windowId, pendingTask };
@@ -329,15 +334,37 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((message) => { if (message?.action === "SIDEPANEL_READY") rememberSidePanelPort(message.windowId, port); });
 });
 
+async function startConversationExport(senderTab, requestedFormat = "custom") {
+  if (typeof senderTab?.id !== "number") return { ok: false, reason: "no_source_tab" };
+  const format = ["custom", "copy", "markdown", "text", "json", "pdf", "word", "image"].includes(requestedFormat) ? requestedFormat : "custom";
+  let extracted;
+  try {
+    extracted = await chrome.tabs.sendMessage(senderTab.id, { action: "MAIW_EXTRACT_CONVERSATION" }, { frameId: 0 });
+  } catch (error) {
+    return { ok: false, reason: error?.message?.includes("Receiving end") ? "unsupported_page" : (error?.message || "extract_failed") };
+  }
+  if (!extracted?.ok || !extracted.conversation) return { ok: false, reason: extracted?.reason || "conversation_not_found" };
+  const conversation = conversationExport.normalizeConversation(extracted.conversation);
+  if (!conversation.messages.length) return { ok: false, reason: "conversation_not_found" };
+  if (format === "copy") return { ok: true, format, text: conversationExport.markdownFromConversation(conversation) };
+  const jobId = crypto.randomUUID(), key = `maiw.conversationExportJob.${jobId}`;
+  await chrome.storage.session.set({ [key]: { conversation, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id } });
+  const query = new URLSearchParams({ job: jobId, format, ...(format === "custom" ? {} : { auto: "1" }) });
+  const created = await chrome.tabs.create({ url: chrome.runtime.getURL(`conversation-export/preview.html?${query}`), active: true, ...(typeof senderTab.windowId === "number" ? { windowId: senderTab.windowId } : {}) });
+  return { ok: true, format, jobId, tabId: created.id };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const action = message?.action;
   if (action === "OPEN_WORKSPACE") { switchToWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "OPEN_LAUNCHER_SETTINGS") { chrome.storage.session.set({ "maiw.openSettings": "general" }).then(() => switchToWorkspace(sender.tab, message.windowId)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "OPEN_SIDE_PANEL") {
     switchToSidePanel(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true;
   }
   if (action === "TOGGLE_SIDE_PANEL") { toggleSidePanel(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "MINIMIZE_UI") { minimizeWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "SYNC_LAUNCHER_SCOPE") { syncPetContentScript().then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "START_CONVERSATION_EXPORT") { startConversationExport(sender.tab, message.format).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "CLOSE_WORKSPACE_FOR_SIDE_PANEL") { resolveWindowId(message.windowId, sender.tab).then(closeWorkspaceForSidePanel).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "REGISTER_WORKSPACE") { const tabId = sender.tab?.id; if (typeof tabId === "number") workspaceTabs.add(tabId); sendResponse({ ok: typeof tabId === "number", tabId, windowId: sender.tab?.windowId }); return false; }
   if (action === "DISPATCH_PROMPT") {

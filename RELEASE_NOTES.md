@@ -1,3 +1,19 @@
+# Multi AI Workbench 0.6.0
+
+## Conversation export and configurable pet gestures
+
+- Triple-click the desktop pet to open a complete conversation export center without reading the page in advance.
+- Configure the single-click, double-click, and triple-click actions independently in Settings.
+- Extract the visible conversation from supported AI webpages into one normalized local data model.
+- Preview, search, select, or range-select messages before export.
+- Export as Markdown, plain text, JSON, Word-compatible document, long PNG, or print/PDF; full-chat Markdown can also be copied directly.
+- Export jobs are temporary and remain in extension session storage. No prompt or conversation content is sent to the extension developer.
+- Chinese and English labels are available in the new export workflow.
+
+The previous local `ai提问-0.6` folder is an abandoned prototype and is not the source of this release. This release is developed from the verified 0.5.0 mainline.
+
+---
+
 # Multi AI Workbench 0.5.0
 
 ## English
