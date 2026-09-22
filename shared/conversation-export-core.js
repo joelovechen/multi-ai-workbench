@@ -7,21 +7,40 @@
 
   function normalizeContent(content) {
     if (!content || typeof content !== "object") return null;
-    const type = ["markdown", "text", "thinking", "code", "image", "attachment", "sources"].includes(content.type) ? content.type : "text";
-    if (["markdown", "text", "thinking", "code"].includes(type)) {
+    const richTypes = ["image_group", "video_blocks", "shopping_card", "shopping_table", "html_widget", "chart", "writing_block", "file_changes"];
+    const type = ["markdown", "text", "thinking", "code", "image", "attachment", "sources", ...richTypes].includes(content.type) ? content.type : "text";
+    if (["markdown", "text", "thinking", "code", "writing_block"].includes(type)) {
       const value = safeText(content.content); if (!value) return null;
-      return { type, content: value, language: safeText(content.language) };
+      return { type, content: value, language: safeText(content.language), title: safeText(content.title), writingBlock: content.writingBlock || null };
     }
     if (type === "image") {
       const url = safeText(content.url || content.imageUrl); if (!url) return null;
-      return { type, url, alt: safeText(content.alt) };
+      return { type, url, alt: safeText(content.alt), imageOrigin: safeText(content.imageOrigin), imageAccess: safeText(content.imageAccess) };
     }
     if (type === "attachment") {
       const name = safeText(content.name || content.attachment?.name); if (!name) return null;
       return { type, name, url: safeText(content.url || content.attachment?.url), mimeType: safeText(content.mimeType || content.attachment?.mime_type), size: Number(content.size || content.attachment?.size) || 0 };
     }
-    const sources = Array.isArray(content.sources) ? content.sources.map((row) => ({ title: safeText(row?.title || row?.domain || row?.url), url: safeText(row?.url) })).filter((row) => row.url) : [];
-    return sources.length ? { type: "sources", sources } : null;
+    if (type === "sources") {
+      const sources = Array.isArray(content.sources) ? content.sources.map((row) => ({ title: safeText(row?.title || row?.domain || row?.url), url: safeText(row?.url) })).filter((row) => row.url) : [];
+      return sources.length ? { type: "sources", sources } : null;
+    }
+    if (type === "image_group") {
+      const group = content.imageGroup || content.image_group || {};
+      const images = (group.images || []).map((row) => ({ ...row, imageUrl: safeText(row?.imageUrl || row?.url), title: safeText(row?.title) })).filter((row) => row.imageUrl);
+      return images.length ? { type, imageGroup: { ...group, images } } : null;
+    }
+    if (type === "video_blocks") {
+      const videos = (content.videoBlocks || []).map((row) => ({ ...row, url: safeText(row?.url), title: safeText(row?.title || row?.url) })).filter((row) => row.url);
+      return videos.length ? { type, videoBlockTitle: safeText(content.videoBlockTitle), videoBlocks: videos } : null;
+    }
+    if (type === "html_widget") {
+      const value = safeText(content.content); if (!value) return null;
+      return { type, content: value, title: safeText(content.title), htmlWidget: content.htmlWidget || null };
+    }
+    const payloadKey = type === "shopping_card" ? "shoppingCard" : type === "shopping_table" ? "shoppingTable" : type === "chart" ? "chart" : "fileChanges";
+    const payload = content[payloadKey];
+    return payload ? { type, [payloadKey]: payload } : null;
   }
 
   function normalizeMessage(message, index) {
@@ -32,6 +51,8 @@
       role: safeRole(message.role),
       model: safeText(message.model),
       createdAt: Number(message.createdAt) || null,
+      updatedAt: Number(message.updatedAt) || null,
+      ids: Array.isArray(message.ids) ? message.ids.map(safeText).filter(Boolean) : [],
       contents
     };
   }
@@ -56,8 +77,8 @@
   }
 
   function selectedConversation(conversation, selectedIds) {
-    const normalized = normalizeConversation(conversation), selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
-    if (!selected.size) return normalized;
+    const normalized = normalizeConversation(conversation); if (selectedIds == null) return normalized;
+    const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
     return { ...normalized, messages: normalized.messages.filter((message) => selected.has(message.id)) };
   }
 
@@ -67,6 +88,17 @@
     if (content.type === "image") return `![${content.alt || "image"}](${content.url})`;
     if (content.type === "attachment") return content.url ? `[📎 ${content.name}](${content.url})` : `📎 ${content.name}`;
     if (content.type === "sources") return content.sources.map((row, index) => `${index + 1}. [${row.title || row.url}](${row.url})`).join("\n");
+    if (content.type === "image_group") return content.imageGroup.images.map((row) => `![${row.title || "image"}](${row.imageUrl})`).join("\n\n");
+    if (content.type === "video_blocks") return [content.videoBlockTitle, ...content.videoBlocks.map((row) => `[${row.title || row.url}](${row.url})`)].filter(Boolean).join("\n\n");
+    if (content.type === "writing_block") return `${content.title ? `### ${content.title}\n\n` : ""}${content.content}`;
+    if (content.type === "html_widget") return `${content.title ? `### ${content.title}\n\n` : ""}\`\`\`html\n${content.content}\n\`\`\``;
+    if (content.type === "chart") return `\`\`\`json\n${JSON.stringify(content.chart, null, 2)}\n\`\`\``;
+    if (content.type === "shopping_card") {
+      const row = content.shoppingCard || {};
+      return [row.title ? `### ${row.title}` : "", row.price, row.description, row.url ? `[Open product](${row.url})` : ""].filter(Boolean).join("\n\n");
+    }
+    if (content.type === "shopping_table") return `\`\`\`json\n${JSON.stringify(content.shoppingTable, null, 2)}\n\`\`\``;
+    if (content.type === "file_changes") return (content.fileChanges?.files || []).map((row) => `- ${row.path}: +${row.added || 0} / -${row.removed || 0}`).join("\n");
     return content.content;
   }
 
@@ -107,5 +139,5 @@
     return cleaned || fallback;
   }
 
-  global.MultiAIConversationExport = Object.freeze({ SCHEMA_VERSION, normalizeConversation, selectedConversation, markdownFromConversation, textFromConversation, jsonFromConversation, sanitizeFilename });
+  global.MultiAIConversationExport = Object.freeze({ SCHEMA_VERSION, normalizeContent, normalizeConversation, selectedConversation, contentMarkdown, markdownFromConversation, textFromConversation, jsonFromConversation, sanitizeFilename });
 })(typeof self !== "undefined" ? self : globalThis);

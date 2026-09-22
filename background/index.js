@@ -3,11 +3,13 @@ importScripts("../shared/platform-adapters.js");
 importScripts("../shared/prompt-templates.js");
 importScripts("../shared/ui-i18n.js");
 importScripts("../shared/conversation-export-core.js");
+importScripts("../shared/conversation-export-platforms.js");
 
 const registry = self.MultiAIServiceRegistry;
 const promptTemplates = self.MultiAIPromptTemplates;
 const uiI18n = self.MultiAIUiI18n || { translate: (value) => value };
 const conversationExport = self.MultiAIConversationExport;
+const conversationExportPlatforms = self.MultiAIConversationExportPlatforms;
 const workspaceUrl = chrome.runtime.getURL("workspace/index.html");
 const workspaceTabs = new Set();
 const CONTEXT_ROOT = "maiw-selection-root";
@@ -15,6 +17,8 @@ const CONTEXT_DIRECT = "maiw-selection-direct";
 const CONTEXT_MORE = "maiw-selection-more";
 const CONTEXT_MANAGE = "maiw-selection-manage";
 const CONTEXT_ACTION_PREFIX = "maiw-action:";
+const EXPORT_CONTEXT_ROOT = "maiw-export-root";
+const EXPORT_CONTEXT_PREFIX = "maiw-export:";
 const PET_SCRIPT_ID = "maiw-pet-all-websites";
 const PET_ORIGINS = ["http://*/*", "https://*/*"];
 const sidePanelPorts = new Map();
@@ -46,7 +50,7 @@ async function syncPetContentScript({ injectOpenTabs = true } = {}) {
   }
   if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: [PET_SCRIPT_ID] });
   const tabs = injectOpenTabs ? await chrome.tabs.query({ url: PET_ORIGINS }) : [];
-  const ordinaryTabs = tabs.filter((tab) => typeof tab.id === "number" && !registry.fromUrl(tab.url));
+  const ordinaryTabs = tabs.filter((tab) => typeof tab.id === "number" && !registry.fromUrl(tab.url) && !conversationExportPlatforms.fromUrl(tab.url));
   const results = await Promise.allSettled(ordinaryTabs.map((tab) => chrome.tabs.sendMessage(tab.id, { action: "REMOVE_FLOATING_LAUNCHER" })));
   return { ok: true, scope, granted, injected: 0, removed: results.filter((row) => row.status === "fulfilled").length };
 }
@@ -90,6 +94,13 @@ async function rebuildContextMenus() {
   chrome.contextMenus.create({ id: "maiw-selection-separator", parentId: CONTEXT_ROOT, type: "separator", contexts: ["selection"] });
   chrome.contextMenus.create({ id: CONTEXT_MORE, parentId: CONTEXT_ROOT, title: settings.locale === "en" ? "Choose another action…" : "选择其他操作…", contexts: ["selection"] });
   chrome.contextMenus.create({ id: CONTEXT_MANAGE, parentId: CONTEXT_ROOT, title: settings.locale === "en" ? "Manage context actions…" : "管理右键操作…", contexts: ["selection"] });
+  const exportSettings = settings.conversationExport || {};
+  if (exportSettings.showContextMenu !== false) {
+    const patterns = [...new Set(conversationExportPlatforms.platforms.flatMap((platform) => platform.hosts.map((host) => `https://${host}/*`)))];
+    chrome.contextMenus.create({ id: EXPORT_CONTEXT_ROOT, title: settings.locale === "en" ? "Export AI conversation" : "导出 AI 对话", contexts: ["page"], documentUrlPatterns: patterns });
+    const rows = settings.locale === "en" ? [["custom", "Preview / custom export"], ["markdown", "Export Markdown"], ["pdf", "Print / PDF"], ["copy", "Copy as Markdown"], ["settings", "Export settings…"]] : [["custom", "预览 / 自定义导出"], ["markdown", "导出 Markdown"], ["pdf", "打印 / PDF"], ["copy", "复制为 Markdown"], ["settings", "导出设置…"]];
+    for (const [id, title] of rows) chrome.contextMenus.create({ id: `${EXPORT_CONTEXT_PREFIX}${id}`, parentId: EXPORT_CONTEXT_ROOT, title, contexts: ["page"], documentUrlPatterns: patterns });
+  }
 }
 
 async function queueSidePanelTask(tab, task) {
@@ -291,7 +302,11 @@ chrome.tabs.onRemoved.addListener((tabId) => workspaceTabs.delete(tabId));
 chrome.runtime.onInstalled.addListener((details) => {
   void rebuildContextMenus().catch((error) => console.warn("[多AI问答助手] 创建右键菜单失败。", error));
   void syncPetContentScript().catch((error) => console.warn("[多AI问答助手] 同步桌宠注入失败。", error));
-  if (details.reason === "install") void openOrFocusWorkspace();
+  if (details.reason === "install") {
+    void chrome.storage.local.set({ "maiw.sidepanelTutorialPending": true });
+    void chrome.action.setBadgeBackgroundColor({ color: "#5b5ce2" });
+    void chrome.action.setBadgeText({ text: "1" });
+  }
 });
 chrome.runtime.onStartup.addListener(() => { void syncPetContentScript().catch(() => {}); });
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -300,6 +315,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const menuId = String(info.menuItemId || "");
+  if (menuId.startsWith(EXPORT_CONTEXT_PREFIX)) {
+    const format = menuId.slice(EXPORT_CONTEXT_PREFIX.length);
+    if (format === "settings") { void chrome.storage.session.set({ "maiw.openSettings": "export" }).then(() => switchToWorkspace(tab)).catch(() => {}); return; }
+    void startConversationExport(tab, format).then(async (result) => {
+      if (!result?.ok || format !== "copy") return;
+      try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: (text) => navigator.clipboard.writeText(text), args: [result.text] }); } catch { await startConversationExport(tab, "custom"); }
+    }).catch((error) => console.error("[多AI问答助手] 对话导出失败。", error)); return;
+  }
   if (menuId === CONTEXT_MANAGE) { void chrome.storage.session.set({ "maiw.openSettings": "operations" }).then(() => switchToWorkspace(tab)).catch(() => {}); return; }
   if (menuId !== CONTEXT_DIRECT && menuId !== CONTEXT_MORE && !menuId.startsWith(CONTEXT_ACTION_PREFIX)) return;
   const actionId = menuId.startsWith(CONTEXT_ACTION_PREFIX) ? menuId.slice(CONTEXT_ACTION_PREFIX.length) : "";
@@ -334,37 +357,50 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((message) => { if (message?.action === "SIDEPANEL_READY") rememberSidePanelPort(message.windowId, port); });
 });
 
-async function startConversationExport(senderTab, requestedFormat = "custom") {
+async function startConversationExport(senderTab, requestedFormat = "custom", direct = false) {
   if (typeof senderTab?.id !== "number") return { ok: false, reason: "no_source_tab" };
-  const format = ["custom", "copy", "markdown", "text", "json", "pdf", "word", "image"].includes(requestedFormat) ? requestedFormat : "custom";
+  const format = ["custom", "copy", "markdown", "text", "json", "pdf", "word", "image", "bundle"].includes(requestedFormat) ? requestedFormat : "custom";
+  const settings = (await chrome.storage.local.get("maiw.settings"))["maiw.settings"] || {}, exportSettings = settings.conversationExport || {};
   let extracted;
   try {
-    extracted = await chrome.tabs.sendMessage(senderTab.id, { action: "MAIW_EXTRACT_CONVERSATION" }, { frameId: 0 });
+    extracted = await chrome.tabs.sendMessage(senderTab.id, { action: "MAIW_EXTRACT_CONVERSATION", options: { loadEarlier: true } }, { frameId: 0 });
   } catch (error) {
     return { ok: false, reason: error?.message?.includes("Receiving end") ? "unsupported_page" : (error?.message || "extract_failed") };
   }
   if (!extracted?.ok || !extracted.conversation) return { ok: false, reason: extracted?.reason || "conversation_not_found" };
   const conversation = conversationExport.normalizeConversation(extracted.conversation);
   if (!conversation.messages.length) return { ok: false, reason: "conversation_not_found" };
-  if (format === "copy") return { ok: true, format, text: conversationExport.markdownFromConversation(conversation) };
+  if (format === "copy") return { ok: true, format, text: conversationExport.markdownFromConversation(conversation, { includeThinking: Boolean(exportSettings.includeThinking), showTimestamp: Boolean(exportSettings.showTimestamp), includeSource: exportSettings.includeSource !== false }) };
+  if (direct && ["markdown", "text", "json", "word"].includes(format)) return { ok: true, direct: true, format, conversation, settings: exportSettings };
   const jobId = crypto.randomUUID(), key = `maiw.conversationExportJob.${jobId}`;
-  await chrome.storage.session.set({ [key]: { conversation, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id } });
+  await cleanupConversationExportJobs();
+  await chrome.storage.session.set({ [key]: { conversation, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
   const query = new URLSearchParams({ job: jobId, format, ...(format === "custom" ? {} : { auto: "1" }) });
   const created = await chrome.tabs.create({ url: chrome.runtime.getURL(`conversation-export/preview.html?${query}`), active: true, ...(typeof senderTab.windowId === "number" ? { windowId: senderTab.windowId } : {}) });
   return { ok: true, format, jobId, tabId: created.id };
+}
+
+async function cleanupConversationExportJobs(maxAge = 60 * 60 * 1000) {
+  const stored = await chrome.storage.session.get(null), now = Date.now(), stale = [];
+  for (const [key, value] of Object.entries(stored)) if (key.startsWith("maiw.conversationExportJob.") && now - Number(value?.createdAt || 0) > maxAge) stale.push(key);
+  if (stale.length) await chrome.storage.session.remove(stale);
+  return stale.length;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const action = message?.action;
   if (action === "OPEN_WORKSPACE") { switchToWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "OPEN_LAUNCHER_SETTINGS") { chrome.storage.session.set({ "maiw.openSettings": "general" }).then(() => switchToWorkspace(sender.tab, message.windowId)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "OPEN_EXPORT_SETTINGS") { chrome.storage.session.set({ "maiw.openSettings": "export" }).then(() => switchToWorkspace(sender.tab, message.windowId)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "OPEN_SIDE_PANEL") {
     switchToSidePanel(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true;
   }
   if (action === "TOGGLE_SIDE_PANEL") { toggleSidePanel(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "MINIMIZE_UI") { minimizeWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "SYNC_LAUNCHER_SCOPE") { syncPetContentScript().then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
-  if (action === "START_CONVERSATION_EXPORT") { startConversationExport(sender.tab, message.format).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "START_CONVERSATION_EXPORT") { startConversationExport(sender.tab, message.format, Boolean(message.direct)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "INSPECT_CONVERSATION_PAGE") { if (typeof sender.tab?.id !== "number") { sendResponse({ ok: false, state: "unsupported" }); return false; } chrome.tabs.sendMessage(sender.tab.id, { action: "MAIW_INSPECT_CONVERSATION_PAGE" }, { frameId: 0 }).then(sendResponse).catch(() => sendResponse({ ok: false, state: "unsupported" })); return true; }
+  if (action === "DELETE_CONVERSATION_EXPORT_JOB") { chrome.storage.session.remove(`maiw.conversationExportJob.${String(message.jobId || "")}`).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "CLOSE_WORKSPACE_FOR_SIDE_PANEL") { resolveWindowId(message.windowId, sender.tab).then(closeWorkspaceForSidePanel).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "REGISTER_WORKSPACE") { const tabId = sender.tab?.id; if (typeof tabId === "number") workspaceTabs.add(tabId); sendResponse({ ok: typeof tabId === "number", tabId, windowId: sender.tab?.windowId }); return false; }
   if (action === "DISPATCH_PROMPT") {

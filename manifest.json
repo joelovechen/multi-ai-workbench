@@ -9,11 +9,13 @@
   "permissions": ["tabs", "storage", "webNavigation", "declarativeNetRequest", "sidePanel", "contextMenus", "activeTab", "scripting"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "host_permissions": [
-    "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.deepseek.com/*",
+    "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.kimi.ai/*", "https://*.deepseek.com/*",
     "https://*.chatglm.cn/*", "https://*.qianwen.com/*", "https://*.qwen.com/*", "https://chat.qwen.ai/*",
     "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
-    "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*",
+    "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*", "https://www.google.com.hk/*", "https://www.google.co.uk/*",
     "https://*.copilot.com/*", "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*",
+    "https://aistudio.google.com/*", "https://alkalimakersuite-pa.clients6.google.com/*", "https://m365.cloud.microsoft/*", "https://github.com/copilot/*",
+    "https://www.perplexity.ai/*", "https://notebook.google.com/*", "https://notebooklm.google.com/*",
     "https://www.bing.com/*", "https://www.baidu.com/*", "https://weixin.sogou.com/*", "https://zhihu.sogou.com/*", "https://www.sogou.com/*",
     "https://multi-ai-workbench-catalog.pages.dev/*", "https://joelovechen.github.io/multi-ai-workbench/*"
   ],
@@ -42,11 +44,13 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.deepseek.com/*",
+        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.kimi.ai/*", "https://*.deepseek.com/*",
         "https://*.chatglm.cn/*", "https://*.qianwen.com/*", "https://*.qwen.com/*", "https://chat.qwen.ai/*",
         "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
         "https://chatgpt.com/*", "https://gemini.google.com/*", "https://*.copilot.com/*",
         "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*"
+        ,"https://aistudio.google.com/*", "https://m365.cloud.microsoft/*", "https://github.com/copilot/*"
+        ,"https://www.perplexity.ai/*", "https://notebook.google.com/*", "https://notebooklm.google.com/*"
       ],
       "all_frames": true,
       "match_about_blank": true,
@@ -56,25 +60,29 @@
     },
     {
       "matches": [
-        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.deepseek.com/*",
+        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.kimi.ai/*", "https://*.deepseek.com/*",
         "https://*.chatglm.cn/*", "https://*.qianwen.com/*", "https://*.qwen.com/*", "https://chat.qwen.ai/*",
         "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
-        "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*",
+        "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*", "https://www.google.com.hk/*", "https://www.google.co.uk/*",
         "https://*.copilot.com/*", "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*",
+        "https://aistudio.google.com/*", "https://m365.cloud.microsoft/*", "https://github.com/copilot/*",
+        "https://www.perplexity.ai/*", "https://notebook.google.com/*", "https://notebooklm.google.com/*",
         "https://www.bing.com/*", "https://www.baidu.com/*", "https://weixin.sogou.com/*", "https://zhihu.sogou.com/*", "https://www.sogou.com/*"
       ],
       "all_frames": true,
       "match_about_blank": true,
       "run_at": "document_idle",
-      "js": ["shared/services.js", "shared/platform-adapters.js", "shared/conversation-export-core.js", "content/conversation-export.js", "content/bridge.js"]
+      "js": ["shared/services.js", "shared/platform-adapters.js", "shared/conversation-export-platforms.js", "shared/conversation-export-core.js", "shared/gemini-conversation-core.js", "shared/archive-core.js", "content/conversation-export.js", "content/bridge.js"]
     },
     {
       "matches": [
-        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.deepseek.com/*",
+        "https://*.doubao.com/*", "https://*.kimi.com/*", "https://*.kimi.ai/*", "https://*.deepseek.com/*",
         "https://*.chatglm.cn/*", "https://*.qianwen.com/*", "https://*.qwen.com/*", "https://chat.qwen.ai/*",
         "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
-        "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*",
+        "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*", "https://www.google.com.hk/*", "https://www.google.co.uk/*",
         "https://*.copilot.com/*", "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*",
+        "https://aistudio.google.com/*", "https://m365.cloud.microsoft/*", "https://github.com/copilot/*",
+        "https://www.perplexity.ai/*", "https://notebook.google.com/*", "https://notebooklm.google.com/*",
         "https://www.bing.com/*", "https://www.baidu.com/*", "https://weixin.sogou.com/*", "https://zhihu.sogou.com/*", "https://www.sogou.com/*"
       ],
       "run_at": "document_idle",
@@ -100,11 +108,11 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io; img-src 'self' data: blob: https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io; frame-src https: http:;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https: data: blob:; img-src 'self' data: blob: https:; frame-src https: http:;"
   },
   "web_accessible_resources": [{
     "resources": [
-      "assets/launcher-pet.png", "assets/pet/pet-idle.webm", "assets/pet/pet-click.webm", "assets/pet/pet-drag.webm",
+      "assets/launcher-pet.png", "assets/platform-icons/*", "assets/pet/pet-idle.webm", "assets/pet/pet-click.webm", "assets/pet/pet-drag.webm",
       "assets/pet/pet-click-happy.webm", "assets/pet/pet-click-shy.webm", "assets/pet/pet-click-laugh.webm", "assets/pet/pet-click-angry.webm",
       "assets/pet/pet-random-look.webm", "assets/pet/pet-random-yawn.webm", "assets/pet/pet-random-stretch.webm", "assets/pet/pet-random-cube.webm",
       "assets/pet/pet-random-code.webm", "assets/pet/pet-random-snack.webm", "assets/pet/pet-random-hum.webm", "assets/pet/pet-random-dance.webm", "assets/pet/pet-random-think.webm"

@@ -8,12 +8,16 @@ A free, open-source, local-first Chrome and Microsoft Edge extension for asking 
 
 - Supports 13 AI services, 3 search engines, and 2 content-search services.
 - Enables DeepSeek, Doubao, and Tencent Yuanbao by default; the side panel opens DeepSeek first.
+- Does not force-open a full-screen page after installation; the first toolbar click opens the side panel and shows a short single/double/triple-click tutorial.
 - Shows up to 10 services in one-row or two-row layouts with drag-and-drop ordering.
 - Provides a draggable prompt composer and a native browser side panel that displays one AI at a time while still supporting parallel queries.
 - Switches cleanly between full-page and side-panel modes.
 - Offers a draggable animated or static desktop-pet launcher on supported pages.
 - Lets you configure the pet's single-, double-, and triple-click actions; triple-click opens the conversation export center by default.
-- Exports visible conversations from supported AI webpages through a searchable, selectable preview as Markdown, TXT, JSON, Word-compatible DOC, long PNG, or print/PDF.
+- Loads earlier messages where the supported AI page permits it and labels every extraction as complete or partial based on observable evidence.
+- Provides searchable previews, role/range selection, Markdown, TXT, JSON, real DOCX, Markdown resource ZIP, Base64 images, long PNG, and print/PDF.
+- Adds configurable webpage context-menu exports, filenames, image handling, document styling, and PDF page options.
+- Covers 17 conversation-export entries with local service-identification icons; Markdown, TXT, DOCX, and JSON can download the full conversation directly without opening the preview page.
 - Sends selected webpage text through context-menu actions or keyboard shortcuts.
 - Includes three built-in prompt actions: bidirectional Chinese/English translation, summarization, and plain-language explanation.
 - Supports custom prompt actions, groups, ordering, target services, answer modes, shortcuts, and send previews.
@@ -50,4 +54,4 @@ The extension has no product account, telemetry, API-key hosting, advertising SD
 
 ## License
 
-The source code is released under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for redistributed asset notices.
+The project source is released under the [Unlicense](LICENSE). Redistributed third-party assets keep their original licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

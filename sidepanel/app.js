@@ -7,6 +7,20 @@
   const state = { services: [], targets: new Set(), active: "", locale: "", answerMode: "expert", embedLayoutMode: "adaptive", files: [], ready: new Set(), statuses: new Map(), operations: [], groups: [], activeActionId: "", recentActionIds: [], actionContext: {}, failedServices: new Set(), lastPayload: null, lastSent: null };
   const pending = new Map(), readyOrigins = new Map(); let draftTimer = 0, initialized = false, deferredTask = null, lastCarouselWheelAt = 0, affiliateController = null;
 
+  function showGestureTutorial(locale) {
+    const en = locale === "en", tutorial = $("#gestureTutorial");
+    const copy = en ? {
+      eyebrow: "QUICK START", title: "Three ways to use the web pet", lead: "The pet floats near the edge of regular webpages. You can change every gesture in Settings.",
+      singleTitle: "Click · Open side panel", singleText: "Ask at any time without leaving the current page.", doubleTitle: "Double-click · Open full screen", doubleText: "Compare answers from several AI services side by side.", tripleTitle: "Triple-click · Export conversation", tripleText: "Save the complete chat on a supported AI webpage.", finish: "Got it — start using", foot: "Tip: drag the pet to reposition it."
+    } : {
+      eyebrow: "快速上手", title: "记住桌宠的三种点击方式", lead: "桌宠会悬浮在普通网页边缘，也可以在设置中修改每种手势。",
+      singleTitle: "单击 · 打开侧栏", singleText: "随时提问，同时保留当前网页。", doubleTitle: "双击 · 打开全屏", doubleText: "并排查看多个 AI，适合答案对比。", tripleTitle: "三击 · 对话导出", tripleText: "在支持的 AI 网页中保存完整对话。", finish: "知道了，开始使用", foot: "提示：拖动桌宠可以调整位置。"
+    };
+    $("#gestureTutorialEyebrow").textContent = copy.eyebrow; $("#gestureTutorialTitle").textContent = copy.title; $("#gestureTutorialLead").textContent = copy.lead;
+    $("#tutorialSingleTitle").textContent = copy.singleTitle; $("#tutorialSingleText").textContent = copy.singleText; $("#tutorialDoubleTitle").textContent = copy.doubleTitle; $("#tutorialDoubleText").textContent = copy.doubleText;
+    $("#tutorialTripleTitle").textContent = copy.tripleTitle; $("#tutorialTripleText").textContent = copy.tripleText; $("#finishGestureTutorial").textContent = copy.finish; $("#tutorialFoot").textContent = copy.foot; tutorial.hidden = false;
+  }
+
   function setStatus(message, error = false) { const node = $("#status"); node.textContent = globalThis.MultiAIUiI18n?.translate(message, state.locale) || message; node.classList.toggle("error", error); }
   async function persist() { await chrome.storage.local.set({ "maiw.sidepanel": { services: state.services, targets: [...state.targets], active: state.active, answerMode: state.answerMode, embedLayoutMode: state.embedLayoutMode, recentActionIds: state.recentActionIds, catalogVersion: sidepanelCatalogVersion }, "maiw.sidepanelDraft": { text: $("#question").value, actionId: state.activeActionId } }); }
   function scheduleDraftSave() { clearTimeout(draftTimer); draftTimer = setTimeout(() => void persist(), 250); }
@@ -151,19 +165,20 @@
   }
 
   async function initialize() {
-    const stored = await chrome.storage.local.get(["maiw.sidepanel", "maiw.sidepanelDraft", "maiw.settings", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups"]), saved = stored["maiw.sidepanel"] || {}, draft = stored["maiw.sidepanelDraft"] || {}, main = stored["maiw.settings"] || {};
+    const stored = await chrome.storage.local.get(["maiw.sidepanel", "maiw.sidepanelDraft", "maiw.settings", "maiw.promptTemplates", "maiw.operations", "maiw.operationGroups", "maiw.sidepanelTutorialPending"]), saved = stored["maiw.sidepanel"] || {}, draft = stored["maiw.sidepanelDraft"] || {}, main = stored["maiw.settings"] || {};
     const savedLocale = ["zh", "en"].includes(main.locale) ? main.locale : "";
     const consent = await globalThis.MultiAIPrivacyUI.ensureConsent({ locale: savedLocale || undefined }); state.locale = consent.locale;
     const configuration = promptTemplates.resolveConfiguration(stored["maiw.operations"], stored["maiw.operationGroups"], stored["maiw.promptTemplates"], main.promptMenuTemplateIds); state.operations = configuration.operations; state.groups = configuration.groups; if (configuration.migrated) await chrome.storage.local.set({ "maiw.operations": state.operations, "maiw.operationGroups": state.groups });
     const catalogMigrated = Number(saved.catalogVersion || 0) < sidepanelCatalogVersion;
     const candidates = (catalogMigrated ? sidepanelServices : Array.isArray(saved.services) ? saved.services : sidepanelServices).filter((key) => registry.byKey[key]?.kind === "ai").slice(0, sidepanelMaxFrames); state.services = candidates.length ? candidates : [...sidepanelServices]; state.active = state.services.includes(saved.active) ? saved.active : "deepseek";
     const targets = Array.isArray(saved.targets) ? saved.targets.filter((key) => state.services.includes(key)) : registry.defaults; state.targets = new Set(targets.length ? targets : registry.defaults); state.answerMode = saved.answerMode === "fast" ? "fast" : "expert"; state.embedLayoutMode = saved.embedLayoutMode === "original" ? "original" : "adaptive"; state.recentActionIds = (Array.isArray(saved.recentActionIds) ? saved.recentActionIds : saved.recentTemplateIds || []).slice(0, 5);
-    $("#answerMode").value = state.answerMode; $("#embedLayoutMode").value = state.embedLayoutMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale, compact: true }); globalThis.MultiAIUiI18n?.applyDocument(state.locale); if (catalogMigrated) await persist();
+    $("#answerMode").value = state.answerMode; $("#embedLayoutMode").value = state.embedLayoutMode; $("#question").value = String(draft.text || ""); state.activeActionId = promptTemplates.find(draft.actionId || draft.templateId, state.operations)?.id || ""; renderFrames(); renderManager(); renderActiveTemplate(); renderTemplatePicker(); affiliateController = globalThis.MultiAIAffiliateCatalog.mount({ button: $("#affiliateToggle"), locale: state.locale, compact: true }); globalThis.MultiAIUiI18n?.applyDocument(state.locale); if (catalogMigrated) await persist(); if (stored["maiw.sidepanelTutorialPending"] === true) showGestureTutorial(state.locale);
     if (chrome.sidePanel?.getLayout) { try { const layout = await chrome.sidePanel.getLayout(); if (layout.side === "left") { const notice = $("#sideNotice"); notice.textContent = "浏览器当前把原生侧栏放在左侧；请在浏览器外观设置中切换到右侧。"; notice.hidden = false; } } catch { /* 旧版浏览器不支持读取方向 */ } }
     initialized = true; const pendingTask = deferredTask || (await chrome.storage.session.get("maiw.pendingTask"))["maiw.pendingTask"]; deferredTask = null; if (pendingTask) await consumePendingTask(pendingTask);
   }
 
   $("#managePlatforms").addEventListener("click", () => { const manager = $("#platformManager"), opening = manager.hidden; manager.hidden = !opening; $("#managePlatforms").setAttribute("aria-expanded", String(opening)); renderManager(); });
+  $("#finishGestureTutorial").addEventListener("click", async () => { $("#gestureTutorial").hidden = true; await chrome.storage.local.remove("maiw.sidepanelTutorialPending"); await chrome.action.setBadgeText({ text: "" }); $("#question").focus(); });
   $("#previousModel").addEventListener("click", () => rotateModel(-1));
   $("#nextModel").addEventListener("click", () => rotateModel(1));
   $("#tabList").addEventListener("wheel", (event) => { const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX; if (!delta) return; event.preventDefault(); const now = Date.now(); if (now - lastCarouselWheelAt < 180) return; lastCarouselWheelAt = now; rotateModel(delta > 0 ? 1 : -1); }, { passive: false });

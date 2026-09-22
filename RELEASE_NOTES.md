@@ -4,9 +4,10 @@
 
 - Triple-click the desktop pet to open a complete conversation export center without reading the page in advance.
 - Configure the single-click, double-click, and triple-click actions independently in Settings.
-- Extract the visible conversation from supported AI webpages into one normalized local data model.
-- Preview, search, select, or range-select messages before export.
-- Export as Markdown, plain text, JSON, Word-compatible document, long PNG, or print/PDF; full-chat Markdown can also be copied directly.
+- Extract conversations from 13 supported AI webpages into one normalized local data model, attempt to load earlier messages, and report complete/partial status from observable evidence.
+- Preview, search, filter by role, select, range-select, retry, or cancel resource processing before export.
+- Export as Markdown, plain text, JSON, real DOCX, a Markdown resource ZIP, Base64-image Markdown, long PNG, or print/PDF; full-chat Markdown can also be copied directly.
+- Use a one-level webpage context menu and configure menu visibility, popup placement, filenames, image strategy, document styling, and PDF page options.
 - Export jobs are temporary and remain in extension session storage. No prompt or conversation content is sent to the extension developer.
 - Chinese and English labels are available in the new export workflow.
 

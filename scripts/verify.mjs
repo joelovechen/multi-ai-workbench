@@ -11,11 +11,11 @@ const petAnimations = [
   "pet-random-look.webm", "pet-random-yawn.webm", "pet-random-stretch.webm", "pet-random-cube.webm", "pet-random-code.webm", "pet-random-snack.webm", "pet-random-hum.webm", "pet-random-dance.webm", "pet-random-think.webm"
 ].map((name) => `assets/pet/${name}`);
 const required = [
-  "manifest.json", "_locales/zh_CN/messages.json", "_locales/en/messages.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-core.js",
+  "manifest.json", "_locales/zh_CN/messages.json", "_locales/en/messages.json", "background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-platforms.js", "shared/conversation-export-core.js", "shared/gemini-conversation-core.js", "shared/archive-core.js",
   "shared/platform-adapters.js", "shared/prompt-templates.js", "scripts/behavior-tests.mjs",
   "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/affiliate-catalog.css",
   "workspace/index.html", "workspace/app.js", "workspace/styles.css",
-  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css", "conversation-export/preview.html", "conversation-export/preview.js", "conversation-export/preview.css",
+  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css", "conversation-export/preview.html", "conversation-export/preview.js", "conversation-export/preview.css", "conversation-export/runtime-controls.js",
   "README.md", "PRIVACY.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "assets/launcher-pet.png", ...petAnimations, "shared/privacy-ui.js", "privacy/index.html", "privacy/styles.css", "privacy/app.js"
 ];
 const failures = [];
@@ -57,14 +57,16 @@ check(Boolean(manifest.commands?.["ask-selection"] && manifest.commands?.["open-
 for (let slot = 1; slot <= 8; slot += 1) check(Boolean(manifest.commands?.[`action-slot-${slot}`]), `快捷操作 ${slot} 未声明`);
 check(manifest.content_scripts?.some((entry) => entry.world === "MAIN" && entry.run_at === "document_start" && entry.js?.includes("content/main-world.js")), "受控输入和附件必须有 document_start MAIN world 桥接");
 check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/floating-launcher.js") && entry.all_frames !== true), "网页启动球必须只在顶层受支持页面注入");
-check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/conversation-export.js") && entry.js?.includes("shared/conversation-export-core.js")), "网页对话抓取器或统一导出模型未注入");
+check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/conversation-export.js") && entry.js?.includes("shared/conversation-export-platforms.js") && entry.js?.includes("shared/conversation-export-core.js") && entry.js?.includes("shared/gemini-conversation-core.js")), "网页对话抓取器、导出平台注册表、Gemini 分页核心或统一导出模型未注入");
+check(manifest.content_scripts?.some((entry) => entry.js?.includes("content/conversation-export.js") && entry.js?.includes("shared/archive-core.js")), "直接 Word 导出缺少本地 DOCX 生成模块");
 check(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes("assets/launcher-pet.png") && entry.matches?.length), "桌宠图像未按受支持域名声明为可访问资源");
+check(manifest.web_accessible_resources?.some((entry) => entry.resources?.includes("assets/platform-icons/*")), "对话导出中心的平台图标未声明为网页可访问资源");
 check(petAnimations.every((asset) => manifest.web_accessible_resources?.some((entry) => entry.resources?.includes(asset))), "桌宠 WebM 动画资源声明不完整");
 check(Object.values(manifest.icons || {}).every((path) => path === "assets/launcher-pet.png") && manifest.action?.default_icon?.["16"] === "assets/launcher-pet.png", "扩展图标未使用图片桌宠素材");
 check(["workspace/index.html", "sidepanel/index.html", "privacy/index.html"].every((file) => readFileSync(join(root, file), "utf8").includes('rel="icon" type="image/png" href="../assets/launcher-pet.png"')), "扩展页面 favicon 未统一使用产品图标");
 check(manifest.permissions?.includes("sidePanel") && manifest.side_panel?.default_path === "sidepanel/index.html", "原生侧栏权限或入口缺失");
 for (const origin of ["https://multi-ai-workbench-catalog.pages.dev/*", "https://joelovechen.github.io/multi-ai-workbench/*"]) check(manifest.host_permissions?.includes(origin), `推广目录缺少精确主机权限：${origin}`);
-check(manifest.content_security_policy?.extension_pages?.includes("connect-src 'self' https://multi-ai-workbench-catalog.pages.dev https://joelovechen.github.io"), "推广目录 CSP 连接来源不完整");
+check(manifest.content_security_policy?.extension_pages?.includes("connect-src 'self' https:"), "扩展页 CSP 缺少受主机权限约束的 HTTPS 连接能力");
 
 const catalogPayload = readFileSync(join(root, "docs/affiliate-catalog/catalog.json"));
 const catalogSignature = Buffer.from(readFileSync(join(root, "docs/affiliate-catalog/catalog.sig"), "utf8").trim(), "base64");
@@ -80,9 +82,13 @@ try {
 const sandbox = { self: {}, URL };
 vm.runInNewContext(readFileSync(join(root, "shared/services.js"), "utf8"), sandbox);
 vm.runInNewContext(readFileSync(join(root, "shared/platform-adapters.js"), "utf8"), sandbox);
+vm.runInNewContext(readFileSync(join(root, "shared/conversation-export-platforms.js"), "utf8"), sandbox);
 const registry = sandbox.self.MultiAIServiceRegistry;
+const exportPlatforms = sandbox.MultiAIConversationExportPlatforms;
 check(Boolean(registry), "平台注册表没有成功初始化");
 check(registry?.ai?.length === 13, "AI 平台数量应为 13");
+check(exportPlatforms?.platforms?.length === 17, "网页对话导出入口数量应与参考插件一致为 17");
+check(exportPlatforms?.platforms?.every((platform) => platform.icon && existsSync(join(root, "assets/platform-icons", platform.icon))), "网页对话导出入口存在缺失的平台图标");
 check(registry?.auxiliary?.length === 5, "搜索和内容平台数量应为 5");
 check(registry?.maxFrames === 10, "最大面板数应为 10");
 check(registry?.defaults?.every((key) => registry.byKey[key]), "默认平台包含无效项");
@@ -116,6 +122,18 @@ check(workspaceSource.includes("MultiAIUiI18n") && sidepanelSource.includes("Mul
 for (const signal of ["applyDocument", "MutationObserver", "Multi AI Workbench", "Featured AI Tools", "Pet edge gap", "Manage context actions"]) check(uiI18nSource.includes(signal), `界面本地化缺少覆盖项：${signal}`);
 const launcherSource = readFileSync(join(root, "content/floating-launcher.js"), "utf8");
 for (const signal of ["launcherEdgeGap", "launcherEdgeSnap", "snapToEdge", "hitDimensions", "edgeGap", "edgeSnap"]) check(launcherSource.includes(signal), `桌宠贴边实现缺少信号：${signal}`);
+for (const signal of ["一键导出全部对话", "direct: true", "saveDirectExport", "direct-confirm", "MultiAIArchive", "platform.icon"]) check(launcherSource.includes(signal), `直接导出或真实平台图标缺少实现信号：${signal}`);
+check(backgroundSource.includes('"maiw.sidepanelTutorialPending": true') && backgroundSource.includes("setBadgeText") && !/details\.reason === "install"\) void openOrFocusWorkspace/.test(backgroundSource), "首次安装必须等待用户点击并从侧栏开始");
+check(sidepanelSource.includes("showGestureTutorial") && readFileSync(join(root, "sidepanel/index.html"), "utf8").includes('id="gestureTutorial"'), "首次侧栏手势教程缺失");
+const conversationExportSource = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+for (const signal of ["image_group", "video_blocks", "shopping_card", "shopping_table", "html_widget", "chart", "writing_block", "file_changes"]) check(conversationExportSource.includes(signal) || readFileSync(join(root, "shared/conversation-export-core.js"), "utf8").includes(signal), `对话导出缺少参考富内容类型：${signal}`);
+for (const signal of ["reply_unique_key", "replyGroups.get(replyKey)", "existing.contents.push(...message.contents)", "search_query_result_block"]) check(conversationExportSource.includes(signal), `豆包参考链路缺少实现信号：${signal}`);
+const thirdPartyNotice = readFileSync(join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
+check(thirdPartyNotice.includes("AI Exporter 4.4.6") && thirdPartyNotice.includes("free and unencumbered software released into the public domain") && thirdPartyNotice.includes("https://unlicense.org"), "AI Exporter Unlicense 许可证声明不完整");
+const productLicense = readFileSync(join(root, "LICENSE"), "utf8");
+const packageMetadata = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+check(productLicense.includes("free and unencumbered software released into the public domain") && packageMetadata.license === "Unlicense", "项目自身许可证必须为 Unlicense");
+check(thirdPartyNotice.includes("dsh-pet") && thirdPartyNotice.includes("MIT License"), "继续分发的 dsh-pet 素材必须保留原始 MIT 声明");
 const workspaceInitialize = workspaceSource.slice(workspaceSource.indexOf("async function initialize()"));
 const sidepanelInitialize = sidepanelSource.slice(sidepanelSource.indexOf("async function initialize()"));
 check(workspaceInitialize.indexOf("ensureConsent") < workspaceInitialize.indexOf("renderFrames(); renderHistory()"), "全屏工作台必须在加载第三方平台前完成隐私告知");
@@ -133,7 +151,7 @@ for (const resource of dnrResources) {
 }
 for (const domain of ["deepseek.com", "doubao.com", "yuanbao.tencent.com", "gemini.google.com", "chatgpt.com"]) check(dnrDomains.has(domain), `DNR 缺少核心平台域名：${domain}`);
 
-for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-core.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/privacy-ui.js", "workspace/app.js", "sidepanel/app.js", "conversation-export/preview.js"]) {
+for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-platforms.js", "shared/conversation-export-core.js", "shared/gemini-conversation-core.js", "shared/archive-core.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/privacy-ui.js", "workspace/app.js", "sidepanel/app.js", "conversation-export/preview.js", "conversation-export/runtime-controls.js"]) {
   try { execFileSync(process.execPath, ["--check", join(root, file)], { stdio: "pipe" }); }
   catch (error) { failures.push(`${file} 语法检查失败：${error.stderr?.toString() || error.message}`); }
 }

@@ -66,7 +66,7 @@
 
   <aside id="settingsPanel" class="drawer settings-drawer" hidden aria-label="配置">
     <div class="drawer-head"><strong>配置</strong><button id="settingsClose" class="icon-button" aria-label="关闭">×</button></div>
-    <nav id="settingsTabs" class="settings-tabs"><button data-settings-tab="general" class="active">常规</button><button data-settings-tab="operations">右键与快捷操作</button></nav>
+    <nav id="settingsTabs" class="settings-tabs"><button data-settings-tab="general" class="active">常规</button><button data-settings-tab="operations">右键与快捷操作</button><button data-settings-tab="export">对话导出</button></nav>
     <div id="settingsGeneral">
     <section class="settings-section">
       <label>新打开插件时<select id="openBehavior"><option value="new">创建新对话</option><option value="resume">使用上次对话</option></select></label>
@@ -116,6 +116,26 @@
         <div class="form-grid"><label>回答模式<select id="operationAnswerMode"><option value="inherit">沿用全局</option><option value="expert">专家</option><option value="fast">快速</option></select></label><label>快捷槽位<select id="operationShortcutSlot"><option value="0">不绑定</option><option value="1">快捷操作 1</option><option value="2">快捷操作 2</option><option value="3">快捷操作 3</option><option value="4">快捷操作 4</option><option value="5">快捷操作 5</option><option value="6">快捷操作 6</option><option value="7">快捷操作 7</option><option value="8">快捷操作 8</option></select></label></div>
         <div class="template-form-actions"><button id="deleteOperation" type="button">删除</button><button id="restoreOperation" type="button">恢复内置默认</button><span></span><button id="cancelPromptTemplate" type="button">取消</button><button class="primary" type="submit">保存操作</button></div>
       </form>
+    </section>
+    <section id="conversationExportSettings" class="settings-section" hidden>
+      <h3>对话导出</h3>
+      <label class="setting-row"><div><strong>网页右键导出菜单</strong><small>在支持的 AI 对话页面显示一级导出入口</small></div><label class="switch"><input id="exportContextMenu" type="checkbox" checked><span></span></label></label>
+      <label class="setting-row"><div><strong>导出弹窗位置</strong></div><select id="exportPopupPosition"><option value="pet">跟随桌宠</option><option value="center">页面居中</option></select></label>
+      <label class="setting-row"><div><strong>包含思考过程</strong><small>仅在平台页面可识别到思考内容时生效</small></div><label class="switch"><input id="exportIncludeThinking" type="checkbox"><span></span></label></label>
+      <label class="setting-row"><div><strong>显示消息时间</strong><small>仅导出网页提供的时间信息</small></div><label class="switch"><input id="exportShowTimestamp" type="checkbox"><span></span></label></label>
+      <label class="setting-row"><div><strong>包含来源链接</strong><small>在文档元数据中保留原对话地址</small></div><label class="switch"><input id="exportIncludeSource" type="checkbox" checked><span></span></label></label>
+      <label class="setting-row"><div><strong>默认格式</strong><small>导出中心打开后的首选格式</small></div><select id="exportDefaultFormat"><option value="markdown">Markdown</option><option value="pdf">PDF</option><option value="docx">DOCX</option><option value="bundle">Markdown + 资源包</option><option value="image">长图</option><option value="text">TXT</option><option value="json">JSON</option></select></label>
+      <label class="setting-row"><div><strong>图片处理</strong><small>链接最稳定；Base64 会增大文件；资源包会下载可访问图片</small></div><select id="exportImageMode"><option value="link">保留原始链接</option><option value="base64">嵌入 Base64</option><option value="bundle">保存到资源包</option></select></label>
+      <label class="setting-row"><div><strong>文件名规则</strong><small>支持 {title}、{platform}、{date}</small></div><input id="exportFilenameRule" value="{title}" maxlength="120"></label>
+      <label class="setting-row"><div><strong>预览字号</strong></div><select id="exportFontSize"><option value="14">小</option><option value="16">中</option><option value="18">大</option></select></label>
+      <label class="setting-row"><div><strong>文档主题</strong></div><select id="exportTheme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+      <label class="setting-row"><div><strong>文档字体</strong></div><select id="exportFontFamily"><option value="system">系统字体</option><option value="serif">衬线字体</option><option value="mono">等宽字体</option></select></label>
+      <label class="setting-row"><div><strong>内容宽度</strong></div><select id="exportContentWidth"><option value="720">窄</option><option value="820">标准</option><option value="980">宽</option></select></label>
+      <label class="setting-row"><div><strong>PDF 纸张</strong></div><select id="exportPageSize"><option value="A4">A4</option><option value="Letter">Letter</option></select></label>
+      <label class="setting-row"><div><strong>PDF 方向</strong></div><select id="exportOrientation"><option value="portrait">纵向</option><option value="landscape">横向</option></select></label>
+      <label class="setting-row"><div><strong>PDF 边距</strong></div><select id="exportMargin"><option value="10">窄</option><option value="16">标准</option><option value="24">宽</option></select></label>
+      <label class="setting-row"><div><strong>PDF 缩放</strong></div><select id="exportScale"><option value="0.9">90%</option><option value="1">100%</option><option value="1.1">110%</option></select></label>
+      <label class="setting-row"><div><strong>PDF 页码</strong><small>浏览器打印页眉页脚开启时显示</small></div><label class="switch"><input id="exportPageNumbers" type="checkbox"><span></span></label></label>
     </section>
   </aside>
 

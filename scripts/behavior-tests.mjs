@@ -16,12 +16,128 @@ vm.runInNewContext(readFileSync(join(root, "shared/export-core.js"), "utf8"), sa
 const exportCore = sandbox.self.MultiAIExportCore;
 vm.runInNewContext(readFileSync(join(root, "shared/conversation-export-core.js"), "utf8"), sandbox);
 const conversationExport = sandbox.self.MultiAIConversationExport;
+vm.runInNewContext(readFileSync(join(root, "shared/gemini-conversation-core.js"), "utf8"), sandbox);
+const geminiConversation = sandbox.self.MultiAIGeminiConversation;
+const archiveSandbox = { self: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Blob, Date };
+vm.runInNewContext(readFileSync(join(root, "shared/archive-core.js"), "utf8"), archiveSandbox);
+const archiveCore = archiveSandbox.self.MultiAIArchive;
 const affiliateSandbox = { chrome: { runtime: { getManifest: () => ({ version: "0.6.0" }) } }, URL, self: {} };
 vm.runInNewContext(readFileSync(join(root, "shared/affiliate-catalog.js"), "utf8"), affiliateSandbox);
 const affiliateCatalog = affiliateSandbox.MultiAIAffiliateCatalog;
 
 test("默认平台为 DeepSeek、豆包和腾讯元宝，侧栏首选 DeepSeek", () => {
   assert.deepEqual([...registry.defaults], ["deepseek", "doubao", "yuanbao"]);
+});
+
+test("Gemini batchexecute 分页会恢复时间顺序并保留附件、思考与图片", () => {
+  const row = (id, question) => {
+    const value = [];
+    value[0] = [null, id];
+    value[2] = [[]];
+    value[2][0][0] = question;
+    value[2][0][4] = [[]];
+    value[2][0][4][0][3] = [[null, null, `${id}.pdf`, `https://files.test/${id}.pdf`, null, `${id}-file`, null, null, null, null, null, "application/pdf", null, [0, 0, 42]]];
+    value[3] = [[[]]];
+    value[3][0][0][1] = [`answer-${id}`];
+    value[3][0][0][37] = [[`thinking-${id}`]];
+    value[3][3] = `${id}-answer`;
+    value[3][21] = "Gemini 2.5";
+    value[3][12] = [[[[null, null, null, "https://lh3.googleusercontent.com/gg-image"]]]];
+    value[4] = [1700000000];
+    return value;
+  };
+  const payload = [[row("new", "new question"), row("old", "old question")], "next-cursor"];
+  const framed = `)]}'\n${JSON.stringify([["wrb.fr", "hNvQHb", JSON.stringify(payload)]])}`;
+  const page = geminiConversation.parsePage(geminiConversation.parseBatchResponse(framed, "hNvQHb"));
+  assert.equal(page.rawCount, 2);
+  assert.equal(page.cursor, "next-cursor");
+  assert.equal(page.turns[0].renderId, "old");
+  assert.equal(page.turns[1].renderId, "new");
+  const messages = geminiConversation.messagesFromTurns(page.turns);
+  assert.equal(messages.length, 4);
+  assert.ok(messages[0].contents.some((item) => item.type === "attachment" && item.size === 42));
+  assert.ok(messages[1].contents.some((item) => item.type === "thinking"));
+  assert.ok(messages[1].contents.some((item) => item.type === "image"));
+});
+
+test("17 个导出入口均使用专用抓取适配器且接口失败不静默降级", () => {
+  const platformsSandbox = { URL };
+  vm.runInNewContext(readFileSync(join(root, "shared/conversation-export-platforms.js"), "utf8"), platformsSandbox);
+  const source = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+  const adapters = new Set(platformsSandbox.MultiAIConversationExportPlatforms.platforms.map((row) => row.adapter || row.id));
+  assert.equal(platformsSandbox.MultiAIConversationExportPlatforms.platforms.length, 17);
+  assert.equal(adapters.size, 16);
+  for (const adapter of adapters)
+    assert.match(source, new RegExp(`async ${adapter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\(p\\)`), adapter);
+  assert.match(source, /if \(fn\) return fn\(p\)/);
+  assert.doesNotMatch(source, /if \(fn\)[\s\S]{0,180}catch[\s\S]{0,180}return dom\(p\)/);
+});
+
+test("对话导出生成真正 DOCX ZIP，空选择不会退回全选", async () => {
+  const conversation = { id: "demo", platform: "deepseek", platformName: "DeepSeek", title: "Demo", messages: [{ id: "m1", role: "user", contents: [{ type: "text", content: "Hello" }] }] };
+  assert.equal(conversationExport.selectedConversation(conversation, new Set()).messages.length, 0);
+  const blob = archiveCore.docxBlob(conversationExport.normalizeConversation(conversation));
+  const data = new Uint8Array(await blob.arrayBuffer());
+  assert.deepEqual([...data.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+  assert.match(new TextDecoder().decode(data), /word\/document\.xml/);
+});
+
+test("参考插件的富内容类型会被统一模型保留并写入 Markdown", () => {
+  const richContents = [
+    { type: "image_group", imageGroup: { images: [{ imageUrl: "https://example.test/a.png", title: "A" }] } },
+    { type: "video_blocks", videoBlockTitle: "Videos", videoBlocks: [{ url: "https://example.test/v", title: "V" }] },
+    { type: "shopping_card", shoppingCard: { title: "Product", price: "$9", url: "https://example.test/p" } },
+    { type: "shopping_table", shoppingTable: { columns: ["Name"], rows: [["P"]] } },
+    { type: "html_widget", title: "Widget", content: "<div>Hello</div>" },
+    { type: "chart", chart: { type: "bar", data: [1, 2] } },
+    { type: "writing_block", title: "Draft", content: "Body" },
+    { type: "file_changes", fileChanges: { files: [{ path: "app.js", added: 2, removed: 1 }] } },
+  ];
+  const conversation = conversationExport.normalizeConversation({
+    id: "rich",
+    title: "Rich",
+    messages: [{ id: "m1", role: "assistant", contents: richContents }],
+  });
+  assert.deepEqual(conversation.messages[0].contents.map((item) => item.type), richContents.map((item) => item.type));
+  const markdown = conversationExport.markdownFromConversation(conversation);
+  for (const signal of ["![A]", "Videos", "Product", '"columns"', "<div>Hello</div>", '"type": "bar"', "Draft", "app.js: +2 / -1"])
+    assert.match(markdown, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+});
+
+test("豆包抓取与参考实现一致合并 reply_unique_key，并去重思考和图片", () => {
+  const source = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+  assert.match(source, /reply_unique_key/);
+  assert.match(source, /replyGroups\.get\(replyKey\)/);
+  assert.match(source, /existing\.contents\.push\(\.\.\.message\.contents\)/);
+  assert.match(source, /thinking = new Set\(\)/);
+  assert.match(source, /images = new Set\(\)/);
+  assert.match(source, /search_query_result_block/);
+});
+
+test("项目采用 Unlicense 且第三方许可证声明完整", () => {
+  const license = readFileSync(join(root, "LICENSE"), "utf8");
+  const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const notice = readFileSync(join(root, "THIRD_PARTY_NOTICES.md"), "utf8");
+  assert.match(license, /free and unencumbered software released into the public domain/);
+  assert.equal(packageJson.license, "Unlicense");
+  assert.match(notice, /AI Exporter 4\.4\.6/);
+  assert.match(notice, /free and unencumbered software released into the public domain/);
+  assert.match(notice, /https:\/\/unlicense\.org/);
+  assert.match(notice, /dsh-pet/);
+  assert.match(notice, /MIT License/);
+});
+
+test("高差异平台采用参考实现的完整轮次与富内容规则", () => {
+  const extractor = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+  const mainWorld = readFileSync(join(root, "content/main-world.js"), "utf8");
+  for (const signal of [
+    "chatgptMessages", "chatgptContents", "resolveChatgptShareImages",
+    "claudeCoworkMessages", "AskUserQuestion", "html_widget",
+    "perplexityContents", "WORKFLOW_ITEM_SOURCES", "share_frome",
+    "googleAnswerContents", "data-xpm-latex", "imageOrigin: \"generated\"",
+    "grokCardContents", "uniqueContents",
+  ]) assert.ok(extractor.includes(signal), `缺少参考对齐信号：${signal}`);
+  assert.match(mainWorld, /EXPORT_CHATGPT_SHARE_DATA/);
 });
 
 test("推广目录强制双语、安全链接、状态过滤和动态排序", () => {
@@ -284,10 +400,20 @@ test("网页对话导出使用统一数据模型、真实抓取消息和独立�
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
   const background = readFileSync(join(root, "background/index.js"), "utf8");
   const extractor = readFileSync(join(root, "content/conversation-export.js"), "utf8");
+  const mainWorld = readFileSync(join(root, "content/main-world.js"), "utf8");
+  const exportPlatforms = readFileSync(join(root, "shared/conversation-export-platforms.js"), "utf8");
   const preview = readFileSync(join(root, "conversation-export/preview.js"), "utf8");
+  const launcher = readFileSync(join(root, "content/floating-launcher.js"), "utf8");
   const entry = manifest.content_scripts.find((row) => row.js?.includes("content/conversation-export.js"));
-  assert.ok(entry?.js.includes("shared/conversation-export-core.js"));
-  for (const signal of ["MAIW_EXTRACT_CONVERSATION", "conversation_not_found", "completeness", "profiles"]) assert.match(extractor, new RegExp(signal));
+  assert.ok(entry?.js.includes("shared/conversation-export-platforms.js") && entry?.js.includes("shared/conversation-export-core.js") && entry?.js.includes("shared/gemini-conversation-core.js") && entry?.js.includes("shared/archive-core.js"));
+  for (const signal of ["G.PAGE_SIZE", "gemini_request_context_missing", "gemini_pagination_repeated", "gemini_pagination_limit", "notebooklm_pagination_limit", "perplexity_pagination_limit", "yuanbao_pagination_limit", "doubao_pagination_limit", "if (fn) return fn(p)"]) assert.match(extractor, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const signal of ["MAIW_EXTRACT_CONVERSATION", "conversation_not_found", "completeness", "history_messages", "current_message_id", "ListMessages", "api/v2/chats", "backend-api/conversation", "hNvQHb", "ujx1Bf", "VfAZjd", "khqZz", "ResolveDriveResource", "response-node", "load-responses", "conversation/v1/detail"]) assert.ok(extractor.includes(signal), `导出适配器缺少 ${signal}`);
+  for (const signal of ["EXPORT_GET_CONTEXT", "EXPORT_PAGE_FETCH", "pull_singe_chain_uplink_body", "supported_block_use_cases", "im/chain/single", "WIZ_global_data"]) assert.ok(mainWorld.includes(signal), `主世界捕获器缺少 ${signal}`);
+  for (const id of ["chatgpt", "gemini", "claude", "notebooklm", "grok", "deepseek", "perplexity", "kimi-ai", "kimi-com", "qwen", "doubao", "googleaistudio", "googlesearch", "copilot", "m365copilot", "githubcopilot", "yuanbao"]) assert.match(exportPlatforms, new RegExp(`id: "${id}"`));
+  assert.equal((exportPlatforms.match(/icon: "/g) || []).length, 17);
+  for (const signal of ["direct: true", "saveDirectExport", "一键导出全部对话", "direct-confirm", "completeness !== \"complete\""]) assert.match(launcher, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(manifest.web_accessible_resources.some((row) => row.resources?.includes("assets/platform-icons/*")));
+  assert.match(background, /MultiAIConversationExportPlatforms/);
   for (const signal of ["START_CONVERSATION_EXPORT", "chrome.storage.session", "conversation-export/preview.html", "frameId: 0"]) assert.match(background, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const signal of ["selectedConversation", "markdownFromConversation", "textFromConversation", "jsonFromConversation", "window.print", "exportImage"]) assert.match(preview, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   const conversation = { id: "test", title: "Example", platform: "deepseek", platformName: "DeepSeek", messages: [{ id: "u1", role: "user", contents: [{ type: "text", content: "Hello" }] }, { id: "a1", role: "assistant", contents: [{ type: "markdown", content: "World" }] }] };
@@ -307,6 +433,10 @@ test("首次使用语言跟随浏览器界面语言，已有选择优先", () =>
   assert.match(workspace, /savedLocale \|\| undefined/);
   assert.match(sidepanel, /savedLocale \|\| undefined/);
   assert.doesNotMatch(sidepanel, /locale: "zh"/);
+  const background = readFileSync(join(root, "background/index.js"), "utf8"), sideHtml = readFileSync(join(root, "sidepanel/index.html"), "utf8");
+  assert.doesNotMatch(background, /details\.reason === "install"\) void openOrFocusWorkspace/);
+  assert.match(background, /maiw\.sidepanelTutorialPending/); assert.match(background, /setBadgeText/);
+  for (const id of ["gestureTutorial", "tutorialSingleTitle", "tutorialDoubleTitle", "tutorialTripleTitle", "finishGestureTutorial"]) assert.match(sideHtml, new RegExp(`id="${id}"`));
 });
 
 test("原生侧栏支持单 AI 可见、多个 AI 发送和受控跨框架消息", () => {

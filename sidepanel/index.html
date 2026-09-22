@@ -2,6 +2,21 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>多AI侧栏</title><link rel="icon" type="image/png" href="../assets/launcher-pet.png"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="../shared/affiliate-catalog.css"></head>
 <body>
+  <section id="gestureTutorial" class="gesture-tutorial" hidden aria-labelledby="gestureTutorialTitle">
+    <div class="tutorial-card">
+      <img src="../assets/launcher-pet.png" alt="" class="tutorial-pet">
+      <div class="tutorial-eyebrow" id="gestureTutorialEyebrow">快速上手</div>
+      <h1 id="gestureTutorialTitle">记住桌宠的三种点击方式</h1>
+      <p id="gestureTutorialLead">桌宠会悬浮在普通网页边缘，也可以在设置中修改每种手势。</p>
+      <ol class="tutorial-steps">
+        <li><span>1</span><div><strong id="tutorialSingleTitle">单击 · 打开侧栏</strong><small id="tutorialSingleText">随时提问，同时保留当前网页。</small></div></li>
+        <li><span>2</span><div><strong id="tutorialDoubleTitle">双击 · 打开全屏</strong><small id="tutorialDoubleText">并排查看多个 AI，适合答案对比。</small></div></li>
+        <li><span>3</span><div><strong id="tutorialTripleTitle">三击 · 对话导出</strong><small id="tutorialTripleText">在支持的 AI 网页中保存完整对话。</small></div></li>
+      </ol>
+      <button id="finishGestureTutorial" class="primary tutorial-finish">知道了，开始使用</button>
+      <small id="tutorialFoot" class="tutorial-foot">提示：拖动桌宠可以调整位置。</small>
+    </div>
+  </section>
   <div id="sideNotice" class="side-notice" hidden></div>
   <nav class="ai-tabs" aria-label="AI 平台切换">
     <button id="minimizePanel" class="top-action minimize-tab" title="收起为网页桌宠" aria-label="收起为网页桌宠">

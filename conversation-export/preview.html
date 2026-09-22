@@ -16,11 +16,12 @@
     <aside class="sidebar">
       <section class="card title-card"><label id="titleLabel" for="titleInput">文件标题</label><input id="titleInput" maxlength="120"><div class="meta" id="meta"></div></section>
       <section class="card"><div class="section-head"><strong id="selectLabel">选择消息</strong><span id="selectionCount">0 / 0</span></div><label class="check"><input id="selectAll" type="checkbox" checked> <span id="selectAllLabel">全选</span></label><label><span id="rangeStartLabel">起始消息</span><select id="rangeStart"></select></label><label><span id="rangeEndLabel">结束消息</span><select id="rangeEnd"></select></label><button id="applyRange" type="button">应用范围</button></section>
-      <section class="card"><label id="searchLabel" for="searchInput">搜索对话</label><input id="searchInput" type="search" placeholder="输入关键词筛选"><label class="check"><input id="includeMetadata" type="checkbox" checked> <span id="metadataLabel">包含平台、来源和导出时间</span></label><label class="check"><input id="includeThinking" type="checkbox"> <span id="thinkingLabel">包含思考过程</span></label></section>
+      <section class="card"><label id="searchLabel" for="searchInput">搜索对话</label><input id="searchInput" type="search" placeholder="输入关键词筛选"><div class="role-filters"><label class="check"><input id="showUser" type="checkbox" checked> 用户</label><label class="check"><input id="showAssistant" type="checkbox" checked> 助手</label></div><label class="check"><input id="includeMetadata" type="checkbox" checked> <span id="metadataLabel">包含平台、来源和导出时间</span></label><label class="check"><input id="includeThinking" type="checkbox"> <span id="thinkingLabel">包含思考过程</span></label><label class="check"><input id="showTimestamp" type="checkbox"> 显示消息时间</label><label class="check"><input id="includeSource" type="checkbox" checked> 包含来源链接</label><label>图片处理<select id="imageMode"><option value="link">保留原始链接</option><option value="base64">嵌入 Base64</option><option value="bundle">保存到资源包</option></select></label></section>
+      <section class="card"><strong>内容统计</strong><div class="meta" id="assetStats"></div><div class="meta" id="extractionState"></div></section>
       <section class="card warning" id="warningCard" hidden></section>
     </aside>
     <section class="preview-column">
-      <div class="preview-toolbar"><strong id="previewLabel">预览</strong><span id="status" role="status"></span></div>
+      <div class="preview-toolbar"><strong id="previewLabel">预览</strong><span><button id="cancelButton" type="button">取消</button><button id="retryButton" type="button">重试读取</button> <span id="status" role="status"></span></span></div>
       <div id="messages" class="messages"></div>
     </section>
   </main>
@@ -29,11 +30,14 @@
     <button data-format="markdown" type="button">Markdown</button>
     <button data-format="text" type="button">TXT</button>
     <button data-format="json" type="button">JSON</button>
-    <button data-format="word" type="button">Word</button>
+    <button data-format="word" type="button">DOCX</button>
+    <button data-format="bundle" type="button">Markdown + 资源包</button>
     <button data-format="image" type="button">长图</button>
     <button data-format="pdf" class="primary" type="button">打印 / PDF</button>
   </footer>
   <script src="../shared/conversation-export-core.js"></script>
+  <script src="../shared/archive-core.js"></script>
+  <script src="runtime-controls.js"></script>
   <script src="preview.js"></script>
 </body>
 </html>

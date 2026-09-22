@@ -1,12 +1,9 @@
+_metadata/
 node_modules/
 dist/
-.output/
-.wxt/
 coverage/
 .env
 .env.*
 *.log
-*.zip
-*.crx
 .secrets/
 test-screenshots/

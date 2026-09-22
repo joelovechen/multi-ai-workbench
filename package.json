@@ -16,5 +16,5 @@
     "catalog:validate": "node scripts/catalog-validate.mjs",
     "catalog:sign": "node scripts/catalog-sign.mjs"
   },
-  "license": "MIT"
+  "license": "Unlicense"
 }
