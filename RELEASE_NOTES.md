@@ -1,5 +1,7 @@
 # Multi AI Workbench 0.6.0
 
+> Development status, 2026-09-23: automated checks pass and Gemini text/complete-history extraction has been exercised, but Gemini conversations containing images fail during export. The image resource pipeline remains a release blocker; no new 0.6.0 candidate should be published until actual DOCX, ZIP, image, and PDF outputs are verified.
+
 ## Conversation export and configurable pet gestures
 
 - Triple-click the desktop pet to open a complete conversation export center without reading the page in advance.

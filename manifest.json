@@ -13,6 +13,7 @@
     "https://*.chatglm.cn/*", "https://*.qianwen.com/*", "https://*.qwen.com/*", "https://chat.qwen.ai/*",
     "https://yuanbao.tencent.com/*", "https://*.minimaxi.com/*", "https://zhida.zhihu.com/*",
     "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.google.com/*", "https://www.google.com.hk/*", "https://www.google.co.uk/*",
+    "https://*.googleusercontent.com/*", "https://*.usercontent.google.com/*",
     "https://*.copilot.com/*", "https://copilot.microsoft.com/*", "https://grok.com/*", "https://*.claude.ai/*",
     "https://aistudio.google.com/*", "https://alkalimakersuite-pa.clients6.google.com/*", "https://m365.cloud.microsoft/*", "https://github.com/copilot/*",
     "https://www.perplexity.ai/*", "https://notebook.google.com/*", "https://notebooklm.google.com/*",
@@ -41,6 +42,7 @@
   },
   "background": { "service_worker": "background/index.js" },
   "side_panel": { "default_path": "sidepanel/index.html" },
+  "sandbox": { "pages": ["conversation-export/widget-sandbox.html"] },
   "content_scripts": [
     {
       "matches": [
@@ -108,7 +110,8 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https: data: blob:; img-src 'self' data: blob: https:; frame-src https: http:;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https: data: blob:; img-src 'self' data: blob: https:; frame-src 'self' https: http:;",
+    "sandbox": "sandbox allow-scripts; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob: https:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"
   },
   "web_accessible_resources": [{
     "resources": [

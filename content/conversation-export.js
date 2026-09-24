@@ -2,6 +2,8 @@
   "use strict";
   if (top !== window || globalThis.__MAIW_CONVERSATION_EXTRACTOR__) return;
   globalThis.__MAIW_CONVERSATION_EXTRACTOR__ = 1;
+  let extractionController = null;
+  let extractionTaskId = "";
   const R = globalThis.MultiAIConversationExportPlatforms,
     s = (ms) => new Promise((r) => setTimeout(r, ms)),
     cl = (v) =>
@@ -30,10 +32,12 @@
   async function retry(run, label = "request", attempts = 2) {
     let lastError;
     for (let index = 0; index < attempts; index += 1) {
+      if (extractionController?.signal.aborted) throw new DOMException("Aborted", "AbortError");
       try {
         return await run(index);
       } catch (error) {
         lastError = error;
+        if (error?.name === "AbortError") throw error;
         if (index + 1 < attempts) await s(300 * (index + 1));
       }
     }
@@ -41,7 +45,7 @@
   }
   async function json(url, init = {}) {
     return retry(async () => {
-      const r = await fetch(url, { credentials: "include", ...init });
+      const r = await fetch(url, { credentials: "include", signal: extractionController?.signal, ...init });
       if (!r.ok) throw Error(`request_failed:${r.status}`);
       const data = await r.json();
       if (data == null || typeof data !== "object")
@@ -109,17 +113,57 @@
     }
     return found[0];
   }
+  function notebookContents(value) {
+    const sources = new Map(),
+      cleaned = String(value || "").replace(/<a2ui-json>\s*([\s\S]*?)\s*<\/a2ui-json>/gi, (whole, payload) => {
+        try {
+          const rows = JSON.parse(payload);
+          if (!Array.isArray(rows)) return whole;
+          for (const row of rows) for (const component of row?.updateComponents?.components || []) {
+            if (component?.component !== "SourceImportCard") continue;
+            for (const source of component.sources || []) if (/^https?:\/\//i.test(source?.url || "")) {
+              const url = source.url, domain = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+              sources.set(url, { title: cl(source.title || source.sourceName || domain || url), url, domain });
+            }
+          }
+          return "";
+        } catch {
+          return whole;
+        }
+      }),
+      contents = txt(cleaned);
+    if (sources.size) contents.push({ type: "sources", sources: [...sources.values()] });
+    return contents;
+  }
   async function sapi(origin) {
     const cookie = (name) =>
-        document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))?.[1],
-      value = cookie("SAPISID") || cookie("__Secure-3PAPISID");
-    if (!value) return "";
-    const stamp = Math.floor(Date.now() / 1000),
-      bytes = new TextEncoder().encode(`${stamp} ${value} ${origin}`),
-      hash = [...new Uint8Array(await crypto.subtle.digest("SHA-1", bytes))]
-        .map((x) => x.toString(16).padStart(2, "0"))
-        .join("");
-    return `SAPISIDHASH ${stamp}_${hash}`;
+        document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))?.[1] || "",
+      secure = /^(?:https:|chrome-extension:|moz-extension:)/.test(origin),
+      primary = secure
+        ? cookie("SAPISID") || cookie("__Secure-3PAPISID")
+        : cookie("APISID") || cookie("__Secure-3PAPISID"),
+      hashes = [];
+    const digest = async (value, label) => {
+      if (!value) return;
+      const stamp = Math.floor(Date.now() / 1000),
+        bytes = new TextEncoder().encode(`${stamp} ${value} ${origin}`),
+        hash = [...new Uint8Array(await crypto.subtle.digest("SHA-1", bytes))]
+          .map((x) => x.toString(16).padStart(2, "0"))
+          .join("");
+      hashes.push(`${label} ${stamp}_${hash}`);
+    };
+    await digest(primary, secure ? "SAPISIDHASH" : "APISIDHASH");
+    if (secure) {
+      await digest(
+        cookie("__Secure-1PAPISID") || cookie("__1PSAPISID"),
+        "SAPISID1PHASH",
+      );
+      await digest(
+        cookie("__Secure-3PAPISID") || cookie("__3PSAPISID"),
+        "SAPISID3PHASH",
+      );
+    }
+    return hashes.join(" ");
   }
   function strings(value, out = []) {
     if (typeof value === "string" && cl(value)) out.push(cl(value));
@@ -641,6 +685,42 @@
       ids = [];
     }
     return messages;
+  }
+  function chatgptConversation(data, id) {
+    const nodes = Object.values(data.mapping || {}),
+      leaves = nodes
+        .filter((node) => node?.message && !(node.children || []).length)
+        .sort((left, right) => {
+          if (left.id === data.current_node) return -1;
+          if (right.id === data.current_node) return 1;
+          return Number(right.message?.create_time || 0) - Number(left.message?.create_time || 0);
+        }),
+      messageMap = new Map(),
+      branches = [];
+    for (let index = 0; index < leaves.length; index += 1) {
+      const leaf = leaves[index],
+        branchMessages = chatgptMessages(data, id, leaf.id);
+      if (!branchMessages.length) continue;
+      branchMessages.forEach((message) => {
+        if (!messageMap.has(message.id)) messageMap.set(message.id, message);
+      });
+      branches.push({
+        id: `branch-${leaf.id}`,
+        title: `Branch ${index + 1}`,
+        leafMessageId: branchMessages.at(-1)?.id || leaf.id,
+        messageIds: branchMessages.map((message) => message.id),
+      });
+    }
+    const requested = `branch-${data.current_node || leaves[0]?.id || "current"}`;
+    return {
+      messages: [...messageMap.values()].sort(
+        (left, right) => (Number(left.createdAt) || 0) - (Number(right.createdAt) || 0),
+      ),
+      branches,
+      activeBranchId: branches.some((row) => row.id === requested)
+        ? requested
+        : branches[0]?.id || "",
+    };
   }
   async function resolveChatgptShareImages(data) {
     const conversationId = data.conversation_id;
@@ -1217,6 +1297,8 @@
         reachedTop: !!x.reachedTop,
         stable: !!x.stable,
       },
+      activeBranchId: cl(x.activeBranchId),
+      branches: Array.isArray(x.branches) ? x.branches : [],
       messages,
     };
   }
@@ -1259,6 +1341,13 @@
     ])
       if (row?.id != null && row?.base?.url)
         references.set(String(row.id), row.base);
+    for (const block of items || [])
+      if (block?.tool?.contents)
+        for (const content of block.tool.contents) {
+          const result = content?.searchResult;
+          if (result?.id != null && result?.base?.url)
+            references.set(String(result.id), result.base);
+        }
     for (const b of items || []) {
       const thinking =
           b?.think?.content ||
@@ -1284,33 +1373,40 @@
           imageUrl: `data:${b.source.media_type || "image/png"};base64,${b.source.data}`,
           imageOrigin: "uploaded",
         });
-      if (b?.file)
-        if (
-          b.file.meta?.type === "FILE_TYPE_IMAGE" &&
-          (b.file.blob?.signUrl || b.file.url)
-        )
-          out.push({
-            type: "image",
-            imageUrl: b.file.blob?.signUrl || b.file.url,
-            imageOrigin: "uploaded",
-          });
-        else
-          out.push({
-            type: "attachment",
-            attachment: {
-              id: b.file.id || b.id || "file",
-              name: b.file.meta?.name || b.file.name || "attachment",
-              size: Number(b.file.meta?.sizeBytes || b.file.size || 0),
-              mime_type:
-                b.file.meta?.type ||
-                b.file.mime_type ||
-                "application/octet-stream",
-              url:
-                b.file.blob?.signUrl ||
-                b.file.parseResult?.thumbnail?.previewUrl ||
-                b.file.url,
-            },
-          });
+      if (b?.file) {
+        const ext = String(b.file.meta?.ext || "").toLowerCase(),
+          mimeTypes = {
+            png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+            webp: "image/webp", gif: "image/gif", bmp: "image/bmp",
+            svg: "image/svg+xml", pdf: "application/pdf", txt: "text/plain",
+            md: "text/markdown", csv: "text/csv", doc: "application/msword",
+            docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            xls: "application/vnd.ms-excel",
+            xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ppt: "application/vnd.ms-powerpoint",
+            pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          },
+          size = Number(b.file.meta?.sizeBytes || b.file.size || 0),
+          url = b.file.blob?.signUrl ||
+            b.file.parseResult?.thumbnail?.previewUrl ||
+            b.file.parseResult?.thumbnail?.thumbnailUrl ||
+            b.file.parseResult?.thumbnail?.mobileThumbnailUrl ||
+            b.file.url;
+        out.push({
+          type: "attachment",
+          attachment: {
+            id: b.file.id || b.id || "kimi-file",
+            name: b.file.meta?.name || b.file.name || "attachment",
+            size: Number.isFinite(size) ? size : 0,
+            file_token_size: Number.isFinite(size) ? size : 0,
+            mime_type: mimeTypes[ext] ||
+              (b.file.meta?.type === "FILE_TYPE_IMAGE" ? (ext ? `image/${ext}` : "image/*") : "application/octet-stream"),
+            source: "kimi",
+            url,
+            is_big_paste: false,
+          },
+        });
+      }
       if (b?.type === "tool_use" && b?.name === "artifacts" && b.input?.content)
         out.push({
           type: "code",
@@ -1449,17 +1545,18 @@
         if (!shareData) {
           const response = await fetch(location.href, {
             credentials: "include",
+            signal: extractionController?.signal,
             headers: { Accept: "text/html" },
           });
           if (!response.ok) throw Error(`share_page_request_failed:${response.status}`);
           shareData = await parseChatgptShareHtml(await response.text());
         }
         const data = await resolveChatgptShareImages(shareData),
-          messages = chatgptMessages(data, id);
+          tree = chatgptConversation(data, id);
         return done(p, {
           id: data.conversation_id || id,
           title: data.title,
-          messages,
+          ...tree,
         });
       }
       const captured = (await capture()).chatgpt || {};
@@ -1476,8 +1573,8 @@
       const d = await json(`/backend-api/conversation/${id}`, { headers: h });
       if (!d.mapping || typeof d.mapping !== "object")
         throw Error("invalid_conversation_response");
-      const messages = chatgptMessages(d, id);
-      return done(p, { id, title: d.title, messages });
+      const tree = chatgptConversation(d, id);
+      return done(p, { id, title: d.title, ...tree });
     },
     async claude(p) {
       const share = location.pathname.match(/^\/share\/([A-Za-z0-9_-]+)/)?.[1],
@@ -1769,16 +1866,7 @@
       const r = await json(`/api/v2/chats/${id}`, { headers: h }),
         d = r.data,
         history = d?.chat?.history,
-        rows = d?.chat?.messages?.length
-          ? d.chat.messages
-          : branch(
-              Object.values(history?.messages || {}),
-              "id",
-              "parentId",
-              "timestamp",
-              history?.currentId || d?.currentId,
-            ),
-        messages = rows.flatMap((x) => {
+        convert = (x) => {
           if (!["user", "assistant"].includes(x.role)) return [];
           const c = [];
           if (cl(x.reasoning_content))
@@ -1815,10 +1903,54 @@
                 ),
               ]
             : [];
+        },
+        treeRows = Object.values(history?.messages || {}),
+        parentIds = new Set(treeRows.map((row) => row.parentId).filter(Boolean)),
+        activeLeaf = history?.currentId || d?.currentId,
+        leaves = treeRows
+          .filter((row) => !parentIds.has(row.id))
+          .sort((left, right) => {
+            if (left.id === activeLeaf) return -1;
+            if (right.id === activeLeaf) return 1;
+            return (tm(right.timestamp) || 0) - (tm(left.timestamp) || 0);
+          }),
+        messageMap = new Map(),
+        branches = [];
+      for (let index = 0; index < leaves.length; index += 1) {
+        const leaf = leaves[index],
+          branchMessages = branch(
+            treeRows,
+            "id",
+            "parentId",
+            "timestamp",
+            leaf.id,
+          ).flatMap(convert);
+        if (!branchMessages.length) continue;
+        branchMessages.forEach((message) => {
+          if (!messageMap.has(message.id)) messageMap.set(message.id, message);
         });
+        branches.push({
+          id: `branch-${leaf.id}`,
+          title: `Branch ${index + 1}`,
+          leafMessageId: branchMessages.at(-1)?.id || leaf.id,
+          messageIds: branchMessages.map((message) => message.id),
+        });
+      }
+      const requestedBranchId = `branch-${activeLeaf || leaves[0]?.id || "current"}`,
+        messages = [...messageMap.values()].sort(
+          (left, right) => (Number(left.createdAt) || 0) - (Number(right.createdAt) || 0),
+        );
       if (!r.success || !history?.messages)
         throw Error("invalid_conversation_response");
-      return done(p, { id: d?.id || id, title: d?.title, messages });
+      return done(p, {
+        id: d?.id || id,
+        title: d?.title,
+        messages,
+        branches,
+        activeBranchId: branches.some((row) => row.id === requestedBranchId)
+          ? requestedBranchId
+          : branches[0]?.id || "",
+      });
     },
     async copilot(p) {
       const id = location.pathname.match(/\/chats\/([^/?#]+)/)?.[1];
@@ -2063,6 +2195,7 @@
         form.set("at", atToken);
         const response = await fetch(url, {
           method: "POST",
+          signal: extractionController?.signal,
           credentials: "include",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -2080,7 +2213,7 @@
           msg(
             `${id}_summary`,
             "assistant",
-            txt(at(summary, [0, 0, 0], "")),
+            notebookContents(at(summary, [0, 0, 0], "")),
             Date.now(),
             "notebooklm",
           ),
@@ -2133,7 +2266,7 @@
               msg(
                 at(row, [0], index),
                 "assistant",
-                txt(answer),
+                notebookContents(answer),
                 stamp,
                 "notebooklm",
               ),
@@ -2176,6 +2309,7 @@
             if (token) form.set("at", token);
             const response = await fetch(url, {
               method: "POST",
+              signal: extractionController?.signal,
               credentials: "include",
               headers: {
                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -2825,14 +2959,41 @@
       : { supported: false, state: "unsupported" };
   }
   chrome.runtime.onMessage.addListener((m, _s, r) => {
+    if (m?.action === "MAIW_CANCEL_CONVERSATION_EXTRACTION") {
+      if (!m.taskId || m.taskId === extractionTaskId) extractionController?.abort();
+      r({ ok: true });
+      return false;
+    }
+    if (m?.action === "MAIW_FETCH_EXPORT_ASSET") {
+      const url = String(m.url || "");
+      if (!/^https?:\/\//i.test(url) && !url.startsWith("data:")) { r({ ok: false, reason: "asset_url_invalid" }); return false; }
+      const isSameOrigin = url.startsWith(location.origin);
+      const init = isSameOrigin ? { credentials: "include", cache: "no-store" } : { cache: "no-store" };
+      fetch(url, init).then(async (response) => {
+        if (!response.ok) throw Error(`HTTP ${response.status}`);
+        const rawMime = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+        if (rawMime && (rawMime.includes("text/html") || rawMime.includes("application/json"))) {
+          throw Error(`invalid_content_type:${rawMime}`);
+        }
+        const blob = await response.blob();
+        if (!blob || blob.size === 0) throw Error("empty_response");
+        const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
+        r({ ok: true, dataUrl, mime: blob.type || rawMime || "application/octet-stream", size: blob.size });
+      }).catch((error) => r({ ok: false, reason: error.message || "asset_fetch_failed" }));
+      return true;
+    }
     if (m?.action === "MAIW_INSPECT_CONVERSATION_PAGE") {
       r({ ok: true, ...inspect() });
       return false;
     }
     if (m?.action !== "MAIW_EXTRACT_CONVERSATION") return false;
-    extract()
+    extractionController?.abort();
+    extractionController = new AbortController();
+    extractionTaskId = String(m.taskId || "");
+    extract(m.options || {})
       .then((conversation) => r({ ok: true, conversation }))
-      .catch((e) => r({ ok: false, reason: e.message || "extract_failed" }));
+      .catch((e) => r({ ok: false, reason: e?.name === "AbortError" ? "cancelled" : e.message || "extract_failed" }))
+      .finally(() => { extractionController = null; extractionTaskId = ""; });
     return true;
   });
 })();

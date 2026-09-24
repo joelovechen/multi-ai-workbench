@@ -18,9 +18,22 @@ vm.runInNewContext(readFileSync(join(root, "shared/conversation-export-core.js")
 const conversationExport = sandbox.self.MultiAIConversationExport;
 vm.runInNewContext(readFileSync(join(root, "shared/gemini-conversation-core.js"), "utf8"), sandbox);
 const geminiConversation = sandbox.self.MultiAIGeminiConversation;
-const archiveSandbox = { self: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Blob, Date };
+const archiveSandbox = { self: { MultiAIConversationExport: conversationExport }, TextEncoder, Uint8Array, Uint32Array, DataView, Blob, Date };
 vm.runInNewContext(readFileSync(join(root, "shared/archive-core.js"), "utf8"), archiveSandbox);
 const archiveCore = archiveSandbox.self.MultiAIArchive;
+const assetSandbox = {
+  self: { MultiAIConversationExport: conversationExport },
+  fetch: globalThis.fetch,
+  Blob,
+  URL,
+  TextEncoder,
+  Uint8Array,
+  Buffer,
+  structuredClone,
+  chrome: { runtime: {}, tabs: {} }
+};
+vm.runInNewContext(readFileSync(join(root, "conversation-export/asset-manager.js"), "utf8"), assetSandbox);
+const assetManagerModule = assetSandbox.self.MultiAIAssetManager;
 const affiliateSandbox = { chrome: { runtime: { getManifest: () => ({ version: "0.6.0" }) } }, URL, self: {} };
 vm.runInNewContext(readFileSync(join(root, "shared/affiliate-catalog.js"), "utf8"), affiliateSandbox);
 const affiliateCatalog = affiliateSandbox.MultiAIAffiliateCatalog;
@@ -130,6 +143,7 @@ test("项目采用 Unlicense 且第三方许可证声明完整", () => {
 test("高差异平台采用参考实现的完整轮次与富内容规则", () => {
   const extractor = readFileSync(join(root, "content/conversation-export.js"), "utf8");
   const mainWorld = readFileSync(join(root, "content/main-world.js"), "utf8");
+  const gemini = readFileSync(join(root, "shared/gemini-conversation-core.js"), "utf8");
   for (const signal of [
     "chatgptMessages", "chatgptContents", "resolveChatgptShareImages",
     "claudeCoworkMessages", "AskUserQuestion", "html_widget",
@@ -137,6 +151,10 @@ test("高差异平台采用参考实现的完整轮次与富内容规则", () =>
     "googleAnswerContents", "data-xpm-latex", "imageOrigin: \"generated\"",
     "grokCardContents", "uniqueContents",
   ]) assert.ok(extractor.includes(signal), `缺少参考对齐信号：${signal}`);
+  for (const signal of ["SAPISID1PHASH", "SAPISID3PHASH", "tool.contents", "mobileThumbnailUrl", "SourceImportCard"])
+    assert.ok(extractor.includes(signal), `缺少认证、引用或附件对齐信号：${signal}`);
+  for (const signal of ["shopping_card", "shopping_table", "image_group", "video_blocks", "html_widget", "deep_research_confirmation_content"])
+    assert.ok(gemini.includes(signal), `Gemini 缺少富内容对齐信号：${signal}`);
   assert.match(mainWorld, /EXPORT_CHATGPT_SHARE_DATA/);
 });
 
@@ -415,11 +433,11 @@ test("网页对话导出使用统一数据模型、真实抓取消息和独立�
   assert.ok(manifest.web_accessible_resources.some((row) => row.resources?.includes("assets/platform-icons/*")));
   assert.match(background, /MultiAIConversationExportPlatforms/);
   for (const signal of ["START_CONVERSATION_EXPORT", "chrome.storage.session", "conversation-export/preview.html", "frameId: 0"]) assert.match(background, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const signal of ["selectedConversation", "markdownFromConversation", "textFromConversation", "jsonFromConversation", "window.print", "exportImage"]) assert.match(preview, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const signal of ["selectedConversation", "markdownFromConversation", "textFromConversation", "jsonFromConversation", "window.print", "ImageExport.exportPages"]) assert.match(preview, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   const conversation = { id: "test", title: "Example", platform: "deepseek", platformName: "DeepSeek", messages: [{ id: "u1", role: "user", contents: [{ type: "text", content: "Hello" }] }, { id: "a1", role: "assistant", contents: [{ type: "markdown", content: "World" }] }] };
   assert.match(conversationExport.markdownFromConversation(conversation), /## User[\s\S]*Hello[\s\S]*## DeepSeek[\s\S]*World/);
   assert.equal(conversationExport.selectedConversation(conversation, new Set(["a1"])).messages.length, 1);
-  assert.match(conversationExport.jsonFromConversation(conversation), /"schemaVersion": 1/);
+  assert.match(conversationExport.jsonFromConversation(conversation), /"schemaVersion": 2/);
 });
 
 test("首次使用语言跟随浏览器界面语言，已有选择优先", () => {
@@ -466,4 +484,126 @@ test("原生侧栏支持单 AI 可见、多个 AI 发送和受控跨框架消息
   assert.match(launcher, /launcherSize \* 16 \/ 9/);
   assert.match(workspace, /chrome\.sidePanel\.open\(\{ windowId: state\.workspaceWindowId \}\)/);
   assert.match(workspace, /CLOSE_WORKSPACE_FOR_SIDE_PANEL/);
+});
+
+test("Gemini 图片导出全链路契约：RPC 真实 URL 提取、内联替换、附件归类、候选降级与 DOCX 嵌入", async () => {
+  // 1. Manifest host permissions
+  const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+  assert.ok(manifest.host_permissions.includes("https://*.googleusercontent.com/*"));
+  assert.ok(manifest.host_permissions.includes("https://*.usercontent.google.com/*"));
+
+  // 2. Gemini batchexecute generated image parsing & inline replacement
+  const row = (id) => {
+    const value = [];
+    value[0] = [null, id];
+    value[2] = [[]];
+    value[2][0][0] = "Draw a cat";
+    value[2][0][4] = [[]];
+    // User uploaded attachment image:
+    value[2][0][4][0][3] = [[
+      null, null, "user-cat.jpg",
+      "https://lh3.googleusercontent.com/user-cat-fallback",
+      null, "user-cat-ref", null, null, null, null, null,
+      "image/jpeg",
+      "https://lh3.googleusercontent.com/user-cat-thumb",
+      [0, 0, 1024]
+    ]];
+    value[3] = [[[]]];
+    // Answer text with image placeholder token
+    value[3][0][0][1] = [
+      "Here is your cat:\nhttps://lh3.googleusercontent.com/gg/placeholder-cat\nHope you like it!"
+    ];
+    value[3][3] = "answer-cat";
+    value[3][21] = "Gemini 2.5";
+    // Generated image metadata at [3][12]:
+    value[3][12] = [
+      [
+        [
+          [
+            null, null, null,
+            "https://lh3.googleusercontent.com/gg/real-cat-highres",
+            null, null,
+            "https://lh3.googleusercontent.com/gg/real-cat-thumb"
+          ],
+          "http://googleusercontent.com/image_generation_content/cat-marker",
+          null, null, null, null, null, null, null, null, null, null, null,
+          "https://lh3.googleusercontent.com/gg/placeholder-cat"
+        ]
+      ]
+    ];
+    return value;
+  };
+
+  const framed = `)]}'\n${JSON.stringify([["wrb.fr", "hNvQHb", JSON.stringify([[row("turn-1")], null])]])}`;
+  const page = geminiConversation.parsePage(geminiConversation.parseBatchResponse(framed, "hNvQHb"));
+  const messages = geminiConversation.messagesFromTurns(page.turns);
+  assert.equal(messages.length, 2);
+
+  // User message has attachment
+  const userAttachment = messages[0].contents.find((c) => c.type === "attachment");
+  assert.ok(userAttachment);
+  assert.equal(userAttachment.imageOrigin, "attachment");
+  assert.equal(userAttachment.imageAccess, "private");
+  assert.ok(userAttachment.candidates.length >= 2);
+
+  // Assistant message has inline image replaced into contents
+  const assistantContents = messages[1].contents;
+  assert.equal(assistantContents[0].type, "markdown");
+  assert.match(assistantContents[0].content, /Here is your cat:/);
+  assert.equal(assistantContents[1].type, "image");
+  assert.equal(assistantContents[1].url, "https://lh3.googleusercontent.com/gg/real-cat-highres");
+  assert.ok(assistantContents[1].candidates.includes("https://lh3.googleusercontent.com/gg/real-cat-thumb"));
+  assert.equal(assistantContents[2].type, "markdown");
+  assert.match(assistantContents[2].content, /Hope you like it!/);
+
+  // 3. collectAssets and Markdown serialization
+  const normalized = conversationExport.normalizeConversation({
+    id: "test-gemini",
+    platform: "gemini",
+    platformName: "Gemini",
+    title: "Cat Chat",
+    messages
+  });
+
+  const assetsWithoutAttachments = conversationExport.collectAssets(normalized).filter((a) => a.kind !== "attachment");
+  // Both generated image and image attachment are retained as kind "image"!
+  assert.equal(assetsWithoutAttachments.length, 2);
+  assert.ok(assetsWithoutAttachments.some((a) => a.url === "https://lh3.googleusercontent.com/gg/real-cat-highres"));
+  assert.ok(assetsWithoutAttachments.some((a) => a.url === "https://lh3.googleusercontent.com/user-cat-fallback"));
+
+  // Markdown serialization emits Markdown images for image attachments
+  const md = conversationExport.markdownFromConversation(normalized);
+  assert.match(md, /!\[user-cat\.jpg\]\(https:\/\/lh3\.googleusercontent\.com\/user-cat-fallback\)/);
+  assert.match(md, /!\[Gemini generated image\]\(https:\/\/lh3\.googleusercontent\.com\/gg\/real-cat-highres\)/);
+
+  // 4. AssetManager candidate fallback and error handling
+  const assetMgr = new assetManagerModule.AssetManager();
+  const tinyPngBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  // Candidate fallback: primary candidate is invalid, secondary candidate is valid data URI
+  const resolvedItem = await assetMgr.fetch(
+    "https://invalid-host-should-fail.example.test/img.png",
+    null,
+    [tinyPngBase64]
+  );
+  assert.ok(resolvedItem);
+  assert.ok(resolvedItem.dataUrl.startsWith("data:image/png;base64,"));
+
+  // Embedded conversation replaces URLs with resolved dataUrl
+  const resolvedMap = new Map();
+  resolvedMap.set("https://lh3.googleusercontent.com/gg/real-cat-highres", resolvedItem);
+  resolvedMap.set("https://lh3.googleusercontent.com/user-cat-fallback", resolvedItem);
+
+  const embedded = assetMgr.embeddedConversation(normalized, resolvedMap);
+  const embeddedAssistantImage = embedded.messages[1].contents.find((c) => c.type === "image");
+  assert.equal(embeddedAssistantImage.url, resolvedItem.dataUrl);
+
+  // 5. DOCX generation embeds images into word/media/
+  const docxBlob = await archiveCore.docxBlobWithAssets(normalized, {}, resolvedMap);
+  const docxBytes = new Uint8Array(await docxBlob.arrayBuffer());
+  assert.deepEqual([...docxBytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+  const docxText = new TextDecoder().decode(docxBytes);
+  assert.match(docxText, /word\/media\/image1\.png/);
+  assert.match(docxText, /word\/media\/image2\.png/);
+  assert.match(docxText, /<a:blip r:embed="rId/);
 });

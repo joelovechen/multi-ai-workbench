@@ -15,7 +15,7 @@ const required = [
   "shared/platform-adapters.js", "shared/prompt-templates.js", "scripts/behavior-tests.mjs",
   "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/affiliate-catalog.css",
   "workspace/index.html", "workspace/app.js", "workspace/styles.css",
-  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css", "conversation-export/preview.html", "conversation-export/preview.js", "conversation-export/preview.css", "conversation-export/runtime-controls.js",
+  "sidepanel/index.html", "sidepanel/app.js", "sidepanel/styles.css", "conversation-export/preview.html", "conversation-export/preview.js", "conversation-export/preview.css", "conversation-export/runtime-controls.js", "conversation-export/asset-manager.js", "conversation-export/rich-renderer.js", "conversation-export/virtual-list.js", "conversation-export/image-export.js", "conversation-export/library-store.js", "conversation-export/widget-sandbox.html", "conversation-export/widget-sandbox.js", "conversation-library/index.html", "conversation-library/app.js", "conversation-library/styles.css",
   "README.md", "PRIVACY.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "assets/launcher-pet.png", ...petAnimations, "shared/privacy-ui.js", "privacy/index.html", "privacy/styles.css", "privacy/app.js"
 ];
 const failures = [];
@@ -67,6 +67,7 @@ check(["workspace/index.html", "sidepanel/index.html", "privacy/index.html"].eve
 check(manifest.permissions?.includes("sidePanel") && manifest.side_panel?.default_path === "sidepanel/index.html", "原生侧栏权限或入口缺失");
 for (const origin of ["https://multi-ai-workbench-catalog.pages.dev/*", "https://joelovechen.github.io/multi-ai-workbench/*"]) check(manifest.host_permissions?.includes(origin), `推广目录缺少精确主机权限：${origin}`);
 check(manifest.content_security_policy?.extension_pages?.includes("connect-src 'self' https:"), "扩展页 CSP 缺少受主机权限约束的 HTTPS 连接能力");
+check(manifest.sandbox?.pages?.includes("conversation-export/widget-sandbox.html") && manifest.content_security_policy?.sandbox?.includes("connect-src 'none'"), "富内容 HTML Widget 缺少隔离沙箱或禁网 CSP");
 
 const catalogPayload = readFileSync(join(root, "docs/affiliate-catalog/catalog.json"));
 const catalogSignature = Buffer.from(readFileSync(join(root, "docs/affiliate-catalog/catalog.sig"), "utf8").trim(), "base64");
@@ -151,7 +152,7 @@ for (const resource of dnrResources) {
 }
 for (const domain of ["deepseek.com", "doubao.com", "yuanbao.tencent.com", "gemini.google.com", "chatgpt.com"]) check(dnrDomains.has(domain), `DNR 缺少核心平台域名：${domain}`);
 
-for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-platforms.js", "shared/conversation-export-core.js", "shared/gemini-conversation-core.js", "shared/archive-core.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/privacy-ui.js", "workspace/app.js", "sidepanel/app.js", "conversation-export/preview.js", "conversation-export/runtime-controls.js"]) {
+for (const file of ["background/index.js", "content/bridge.js", "content/main-world.js", "content/floating-launcher.js", "content/conversation-export.js", "shared/services.js", "shared/conversation-export-platforms.js", "shared/conversation-export-core.js", "shared/gemini-conversation-core.js", "shared/archive-core.js", "shared/platform-adapters.js", "shared/prompt-templates.js", "shared/export-core.js", "shared/ui-i18n.js", "shared/affiliate-public-key.js", "shared/affiliate-catalog.js", "shared/privacy-ui.js", "workspace/app.js", "sidepanel/app.js", "conversation-export/preview.js", "conversation-export/runtime-controls.js", "conversation-export/asset-manager.js", "conversation-export/rich-renderer.js", "conversation-export/virtual-list.js", "conversation-export/image-export.js", "conversation-export/library-store.js", "conversation-export/widget-sandbox.js", "conversation-library/app.js"]) {
   try { execFileSync(process.execPath, ["--check", join(root, file)], { stdio: "pipe" }); }
   catch (error) { failures.push(`${file} 语法检查失败：${error.stderr?.toString() || error.message}`); }
 }

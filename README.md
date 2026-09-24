@@ -42,6 +42,8 @@ npm run package
 
 The supported AI websites can change their DOM and embedding policies. Passing automated tests does not guarantee that every third-party platform is available at all times.
 
+Current export validation note: Gemini text and complete-history extraction has been exercised with a signed-in session, but exporting conversations that contain images currently fails. The image resource pipeline is blocked pending parity repair and output-file verification; do not treat the current development build as a release candidate.
+
 ## Privacy
 
 The extension has no product account, telemetry, API-key hosting, advertising SDK, or operator-run prompt proxy. Questions, selected text, and attachments are sent directly to services chosen by the user only after a user action. An optional Featured AI Tools entry contains clearly labeled affiliate links; its signed catalog is fetched from GitHub Pages and Cloudflare Pages without extension-operated click tracking. See [PRIVACY.md](PRIVACY.md).

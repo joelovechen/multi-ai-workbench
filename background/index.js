@@ -23,6 +23,7 @@ const PET_SCRIPT_ID = "maiw-pet-all-websites";
 const PET_ORIGINS = ["http://*/*", "https://*/*"];
 const sidePanelPorts = new Map();
 const sidePanelOpenWindows = new Set();
+const conversationExportTasks = new Map();
 
 function normalizedLauncherScope(settings = {}) {
   if (settings.launcherEnabled === false || settings.launcherScope === "off") return "off";
@@ -361,23 +362,61 @@ async function startConversationExport(senderTab, requestedFormat = "custom", di
   if (typeof senderTab?.id !== "number") return { ok: false, reason: "no_source_tab" };
   const format = ["custom", "copy", "markdown", "text", "json", "pdf", "word", "image", "bundle"].includes(requestedFormat) ? requestedFormat : "custom";
   const settings = (await chrome.storage.local.get("maiw.settings"))["maiw.settings"] || {}, exportSettings = settings.conversationExport || {};
-  let extracted;
-  try {
-    extracted = await chrome.tabs.sendMessage(senderTab.id, { action: "MAIW_EXTRACT_CONVERSATION", options: { loadEarlier: true } }, { frameId: 0 });
-  } catch (error) {
-    return { ok: false, reason: error?.message?.includes("Receiving end") ? "unsupported_page" : (error?.message || "extract_failed") };
+  const extract = async (taskId = "") => {
+    try {
+      return await chrome.tabs.sendMessage(senderTab.id, { action: "MAIW_EXTRACT_CONVERSATION", taskId, options: { loadEarlier: true, includeAllBranches: true } }, { frameId: 0 });
+    } catch (error) {
+      return { ok: false, reason: error?.message?.includes("Receiving end") ? "unsupported_page" : (error?.message || "extract_failed") };
+    }
+  };
+  if (format === "copy" || (direct && ["markdown", "text", "json"].includes(format))) {
+    const extracted = await extract();
+    if (!extracted?.ok || !extracted.conversation) return { ok: false, reason: extracted?.reason || "conversation_not_found" };
+    const conversation = conversationExport.normalizeConversation(extracted.conversation);
+    if (!conversation.messages.length) return { ok: false, reason: "conversation_not_found" };
+    if (format === "copy") return { ok: true, format, text: conversationExport.markdownFromConversation(conversation, { includeThinking: Boolean(exportSettings.includeThinking), showTimestamp: Boolean(exportSettings.showTimestamp), includeSource: exportSettings.includeSource !== false }) };
+    return { ok: true, direct: true, format, conversation, settings: exportSettings };
   }
-  if (!extracted?.ok || !extracted.conversation) return { ok: false, reason: extracted?.reason || "conversation_not_found" };
-  const conversation = conversationExport.normalizeConversation(extracted.conversation);
-  if (!conversation.messages.length) return { ok: false, reason: "conversation_not_found" };
-  if (format === "copy") return { ok: true, format, text: conversationExport.markdownFromConversation(conversation, { includeThinking: Boolean(exportSettings.includeThinking), showTimestamp: Boolean(exportSettings.showTimestamp), includeSource: exportSettings.includeSource !== false }) };
-  if (direct && ["markdown", "text", "json", "word"].includes(format)) return { ok: true, direct: true, format, conversation, settings: exportSettings };
   const jobId = crypto.randomUUID(), key = `maiw.conversationExportJob.${jobId}`;
   await cleanupConversationExportJobs();
-  await chrome.storage.session.set({ [key]: { conversation, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
+  await chrome.storage.session.set({ [key]: { status: "loading", requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
   const query = new URLSearchParams({ job: jobId, format, ...(format === "custom" ? {} : { auto: "1" }) });
   const created = await chrome.tabs.create({ url: chrome.runtime.getURL(`conversation-export/preview.html?${query}`), active: true, ...(typeof senderTab.windowId === "number" ? { windowId: senderTab.windowId } : {}) });
+  const task = { sourceTabId: senderTab.id, previewTabId: created.id, cancelled: false };
+  conversationExportTasks.set(jobId, task);
+  const extracted = await extract(jobId);
+  if (task.cancelled || extracted?.reason === "cancelled") {
+    await chrome.storage.session.set({ [key]: { status: "cancelled", requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
+    chrome.runtime.sendMessage({ action: "CONVERSATION_EXPORT_JOB_UPDATED", jobId, status: "cancelled" }).catch(() => {});
+    conversationExportTasks.delete(jobId);
+    return { ok: false, reason: "cancelled", jobId, tabId: created.id };
+  }
+  if (!extracted?.ok || !extracted.conversation) {
+    const reason = extracted?.reason || "conversation_not_found";
+    await chrome.storage.session.set({ [key]: { status: "error", reason, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
+    chrome.runtime.sendMessage({ action: "CONVERSATION_EXPORT_JOB_UPDATED", jobId, status: "error", reason }).catch(() => {});
+    conversationExportTasks.delete(jobId);
+    return { ok: false, reason, jobId, tabId: created.id };
+  }
+  const conversation = conversationExport.normalizeConversation(extracted.conversation);
+  if (!conversation.messages.length) {
+    await chrome.storage.session.set({ [key]: { status: "error", reason: "conversation_not_found", requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
+    chrome.runtime.sendMessage({ action: "CONVERSATION_EXPORT_JOB_UPDATED", jobId, status: "error", reason: "conversation_not_found" }).catch(() => {});
+    conversationExportTasks.delete(jobId);
+    return { ok: false, reason: "conversation_not_found", jobId, tabId: created.id };
+  }
+  await chrome.storage.session.set({ [key]: { status: "ready", conversation, requestedFormat: format, createdAt: Date.now(), sourceTabId: senderTab.id, settings: exportSettings } });
+  chrome.runtime.sendMessage({ action: "CONVERSATION_EXPORT_JOB_UPDATED", jobId, status: "ready" }).catch(() => {});
+  conversationExportTasks.delete(jobId);
   return { ok: true, format, jobId, tabId: created.id };
+}
+
+async function cancelConversationExport(jobId) {
+  const task = conversationExportTasks.get(jobId);
+  if (!task) return { ok: false, reason: "job_not_running" };
+  task.cancelled = true;
+  await chrome.tabs.sendMessage(task.sourceTabId, { action: "MAIW_CANCEL_CONVERSATION_EXTRACTION", taskId: jobId }, { frameId: 0 }).catch(() => {});
+  return { ok: true };
 }
 
 async function cleanupConversationExportJobs(maxAge = 60 * 60 * 1000) {
@@ -387,8 +426,62 @@ async function cleanupConversationExportJobs(maxAge = 60 * 60 * 1000) {
   return stale.length;
 }
 
+function isImageSignature(header, mime = "") {
+  if (!header || header.length < 4) return false;
+  if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) return true;
+  if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return true;
+  if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46) return true;
+  if (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46) return true;
+  if (header[0] === 0x42 && header[1] === 0x4d) return true;
+  if (mime.includes("svg") || (header[0] === 0x3c && (header[1] === 0x73 || header[1] === 0x3f))) return true;
+  if (mime.startsWith("image/")) return true;
+  return false;
+}
+
+function bufferToDataUrl(arrayBuffer, mime = "image/png") {
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  const len = bytes.byteLength;
+  const chunk = 8192;
+  for (let i = 0; i < len; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, len)));
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
+async function fetchImageBase64(url) {
+  if (!url || typeof url !== "string") throw new Error("asset_url_missing");
+  if (url.startsWith("data:")) {
+    const mime = url.match(/^data:([^;,]+)/)?.[1] || "image/png";
+    return { ok: true, dataUrl: url, mime };
+  }
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "image/*, */*" },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const rawMime = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+  if (rawMime && (rawMime.includes("text/html") || rawMime.includes("application/json"))) {
+    throw new Error(`invalid_content_type:${rawMime}`);
+  }
+  const arrayBuf = await response.arrayBuffer();
+  if (!arrayBuf || arrayBuf.byteLength === 0) throw new Error("empty_response");
+  const header = new Uint8Array(arrayBuf.slice(0, 16));
+  const detectedMime = rawMime && rawMime.startsWith("image/") ? rawMime : (header[0] === 0xff ? "image/jpeg" : "image/png");
+  if (!isImageSignature(header, detectedMime)) {
+    throw new Error("image_decode_failed");
+  }
+  const dataUrl = bufferToDataUrl(arrayBuf, detectedMime);
+  return { ok: true, dataUrl, mime: detectedMime, size: arrayBuf.byteLength };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const action = message?.action;
+  if (action === "FETCH_IMAGE_BASE64" || action === "MAIW_FETCH_EXPORT_ASSET_BASE64" || action === "fetch-image-base64") {
+    fetchImageBase64(message.url).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message || "fetch_failed" }));
+    return true;
+  }
   if (action === "OPEN_WORKSPACE") { switchToWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "OPEN_LAUNCHER_SETTINGS") { chrome.storage.session.set({ "maiw.openSettings": "general" }).then(() => switchToWorkspace(sender.tab, message.windowId)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "OPEN_EXPORT_SETTINGS") { chrome.storage.session.set({ "maiw.openSettings": "export" }).then(() => switchToWorkspace(sender.tab, message.windowId)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
@@ -399,6 +492,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (action === "MINIMIZE_UI") { minimizeWorkspace(sender.tab, message.windowId).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "SYNC_LAUNCHER_SCOPE") { syncPetContentScript().then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "START_CONVERSATION_EXPORT") { startConversationExport(sender.tab, message.format, Boolean(message.direct)).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
+  if (action === "CANCEL_CONVERSATION_EXPORT_JOB") { cancelConversationExport(String(message.jobId || "")).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "INSPECT_CONVERSATION_PAGE") { if (typeof sender.tab?.id !== "number") { sendResponse({ ok: false, state: "unsupported" }); return false; } chrome.tabs.sendMessage(sender.tab.id, { action: "MAIW_INSPECT_CONVERSATION_PAGE" }, { frameId: 0 }).then(sendResponse).catch(() => sendResponse({ ok: false, state: "unsupported" })); return true; }
   if (action === "DELETE_CONVERSATION_EXPORT_JOB") { chrome.storage.session.remove(`maiw.conversationExportJob.${String(message.jobId || "")}`).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
   if (action === "CLOSE_WORKSPACE_FOR_SIDE_PANEL") { resolveWindowId(message.windowId, sender.tab).then(closeWorkspaceForSidePanel).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message })); return true; }
